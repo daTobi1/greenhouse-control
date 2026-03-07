@@ -47,8 +47,8 @@ class Scheduler:
                 settings      = await self._db.get_all_settings()
                 inside_mac    = settings.get("inside_sensor_mac", "")
                 outside_mac   = settings.get("outside_sensor_mac", "")
-                scan_interval = float(settings.get("ble_scan_interval", 30))
-                scan_duration = float(settings.get("ble_scan_duration", 10))
+                scan_interval = float(settings.get("ble_scan_interval") or 30)
+                scan_duration = float(settings.get("ble_scan_duration") or 10)
 
                 if inside_mac or outside_mac:
                     self._sb.set_known_devices(inside_mac, outside_mac)
@@ -71,8 +71,8 @@ class Scheduler:
         while self._running:
             try:
                 settings = await self._db.get_all_settings()
-                gpio_pin = int(settings.get("fan_gpio_pin", 18))
-                interval = float(settings.get("fan_update_interval", 10))
+                gpio_pin = int(settings.get("fan_gpio_pin") or 18)
+                interval = float(settings.get("fan_update_interval") or 10)
 
                 if configured_pin != gpio_pin:
                     self._fan.setup(gpio_pin)
@@ -109,14 +109,14 @@ class Scheduler:
             try:
                 settings     = await self._db.get_all_settings()
                 active       = settings.get("timelapse_active", False)
-                interval     = float(settings.get("timelapse_interval", 300))
-                tl_path      = settings.get("timelapse_path", "timelapse")
-                cam_idx      = int(settings.get("camera_index", 0))
-                cap_w        = int(settings.get("camera_capture_width", 0))
-                cap_h        = int(settings.get("camera_capture_height", 0))
+                interval     = float(settings.get("timelapse_interval") or 300)
+                tl_path      = settings.get("timelapse_path") or "timelapse"
+                cam_idx      = int(settings.get("camera_index") or 0)
+                cap_w        = int(settings.get("camera_capture_width") or 0)
+                cap_h        = int(settings.get("camera_capture_height") or 0)
                 capture_mode = settings.get("capture_mode", "still")
-                clip_duration= float(settings.get("clip_duration", 5))
-                clip_fps     = int(settings.get("clip_fps", 10))
+                clip_duration= float(settings.get("clip_duration") or 5)
+                clip_fps     = int(settings.get("clip_fps") or 10)
 
                 self._cam.setup(
                     frames_dir=f"{tl_path}/frames",

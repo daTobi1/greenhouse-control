@@ -82,6 +82,11 @@ class Database:
                 "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
                 (key, json.dumps(value)),
             )
+            # Overwrite stored 'null' with the proper default
+            await self._conn.execute(
+                "UPDATE settings SET value = ? WHERE key = ? AND value = 'null'",
+                (json.dumps(value), key),
+            )
         # Migrate legacy "combined" → "combined_or"
         await self._conn.execute(
             "UPDATE settings SET value = '\"combined_or\"' WHERE key = 'control_mode' AND value = '\"combined\"'"

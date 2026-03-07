@@ -260,7 +260,13 @@ class CameraService:
     # Session listing
     # ------------------------------------------------------------------
 
+    @property
+    def frames_dir(self) -> Path:
+        return self._frames_dir
+
     def get_sessions(self) -> list[dict]:
+        if not self._frames_dir.exists():
+            return []
         sessions = []
         for d in self._frames_dir.iterdir():
             if not d.is_dir():

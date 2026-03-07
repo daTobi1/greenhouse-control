@@ -84,6 +84,37 @@ async def compile_status(session: str):
     return {"session": session, "status": status, "has_video": has_video}
 
 
+@router.get("/sessions/{session}/files")
+async def list_session_files(session: str):
+    """List all captured files in a session."""
+    session_dir = state.camera_service.frames_dir / session
+    if not session_dir.exists():
+        raise HTTPException(404, "Session not found")
+    files = []
+    for f in sorted(session_dir.iterdir()):
+        if f.suffix in (".jpg", ".mp4"):
+            files.append({
+                "name":  f.name,
+                "url":   f"/api/timelapse/sessions/{session}/file/{f.name}",
+                "type":  "video" if f.suffix == ".mp4" else "image",
+                "size":  f.stat().st_size,
+            })
+    return {"session": session, "files": files}
+
+
+@router.get("/sessions/{session}/file/{filename}")
+async def get_session_file(session: str, filename: str):
+    """Serve an individual captured file (image or video)."""
+    # Prevent path traversal
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(400, "Invalid filename")
+    path = (state.camera_service.frames_dir / session / filename).resolve()
+    if not path.exists() or path.suffix not in (".jpg", ".mp4"):
+        raise HTTPException(404, "File not found")
+    media = "video/mp4" if path.suffix == ".mp4" else "image/jpeg"
+    return FileResponse(path, media_type=media)
+
+
 @router.delete("/sessions/{session}")
 async def delete_session(session: str):
     if state.camera_service.current_session == session:

@@ -601,7 +601,7 @@ function renderSessions(sessions) {
   list.innerHTML = sessions.map(s => `
     <div class="session-item">
       <span class="session-name">${s.name}${s.active ? ' ●' : ''}</span>
-      <span class="session-info">${s.frame_count} ${s.capture_mode === 'clip' ? 'Clips' : 'Bilder'}</span>
+      <span class="session-info" onclick="openGallery('${s.name}')">${s.frame_count} ${s.capture_mode === 'clip' ? 'Clips' : 'Bilder'}</span>
       <div class="session-actions">
         ${!s.active
           ? `<button class="btn-small" style="color:var(--danger)"
@@ -981,7 +981,7 @@ async function init() {
   initGauge();
   initCharts();
   await loadControlSettings();
-  await loadCameras();
+  loadCameras();          // Hintergrund – Kamera-Scan kann lange dauern
   await loadSessions();
   await pollAll();
   await loadHistory();
@@ -1000,5 +1000,108 @@ async function init() {
     scheduleUpdateCheck(s.update_check_interval_days ?? 7);
   } catch(e) {}
 }
+
+// ----------------------------------------------------------------
+// Gallery / Lightbox
+// ----------------------------------------------------------------
+let _galleryFiles = [];
+let _lightboxIdx  = 0;
+
+async function openGallery(session) {
+  document.getElementById('gallery-title').textContent = `Aufnahmen – ${session}`;
+  const grid = document.getElementById('gallery-grid');
+  grid.innerHTML = '<div class="gallery-empty">Lade…</div>';
+  document.getElementById('gallery-overlay').classList.remove('hidden');
+
+  try {
+    const r = await fetch(`${API}/api/timelapse/sessions/${encodeURIComponent(session)}/files`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    _galleryFiles = d.files;
+    renderGallery();
+  } catch(err) {
+    console.error('Gallery load error:', err);
+    grid.innerHTML = `<div class="gallery-empty">Fehler beim Laden der Dateien.<br><small style="color:var(--text3)">${err.message || err}</small></div>`;
+  }
+}
+
+function renderGallery() {
+  const grid = document.getElementById('gallery-grid');
+  if (!_galleryFiles.length) {
+    grid.innerHTML = '<div class="gallery-empty">Keine Aufnahmen vorhanden.</div>';
+    return;
+  }
+  grid.innerHTML = _galleryFiles.map((f, i) => {
+    const label = f.name.replace(/\.\w+$/, '').replace(/_/g, ' ');
+    if (f.type === 'video') {
+      return `<div class="gallery-thumb" onclick="openLightbox(${i})">
+        <video src="${f.url}" muted preload="metadata" style="pointer-events:none"></video>
+        <span class="thumb-video-icon">▶</span>
+        <span class="thumb-label">${label}</span>
+      </div>`;
+    }
+    return `<div class="gallery-thumb" onclick="openLightbox(${i})">
+      <img src="${f.url}" loading="lazy" alt="${f.name}">
+      <span class="thumb-label">${label}</span>
+    </div>`;
+  }).join('');
+}
+
+function closeGallery(e) {
+  if (e && e.target !== document.getElementById('gallery-overlay')) return;
+  document.getElementById('gallery-overlay').classList.add('hidden');
+}
+
+function openLightbox(idx) {
+  _lightboxIdx = idx;
+  showLightboxItem();
+  document.getElementById('lightbox-overlay').classList.remove('hidden');
+}
+
+function closeLightbox() {
+  document.getElementById('lightbox-overlay').classList.add('hidden');
+  const vid = document.getElementById('lightbox-video');
+  vid.pause();
+  vid.src = '';
+}
+
+function lightboxNav(dir) {
+  _lightboxIdx = (_lightboxIdx + dir + _galleryFiles.length) % _galleryFiles.length;
+  showLightboxItem();
+}
+
+function showLightboxItem() {
+  const f   = _galleryFiles[_lightboxIdx];
+  const img = document.getElementById('lightbox-img');
+  const vid = document.getElementById('lightbox-video');
+
+  document.getElementById('lightbox-counter').textContent =
+    `${_lightboxIdx + 1} / ${_galleryFiles.length}`;
+
+  if (f.type === 'video') {
+    vid.pause();
+    vid.src = f.url;
+    vid.classList.remove('hidden');
+    img.classList.add('hidden');
+    img.src = '';
+  } else {
+    img.src = f.url;
+    img.classList.remove('hidden');
+    vid.classList.add('hidden');
+    vid.pause();
+    vid.src = '';
+  }
+}
+
+document.addEventListener('keydown', e => {
+  const lb = document.getElementById('lightbox-overlay');
+  if (!lb.classList.contains('hidden')) {
+    if (e.key === 'ArrowLeft')  lightboxNav(-1);
+    if (e.key === 'ArrowRight') lightboxNav(1);
+    if (e.key === 'Escape')     closeLightbox();
+  } else if (!document.getElementById('gallery-overlay').classList.contains('hidden')) {
+    if (e.key === 'Escape') closeGallery({ target: document.getElementById('gallery-overlay') });
+  }
+});
 
 document.addEventListener('DOMContentLoaded', init);
