@@ -11,7 +11,7 @@ DEFAULT_SETTINGS = {
     "outside_sensor_mac": "",
     "target_temperature": 25.0,
     "target_humidity": 65.0,
-    "control_mode": "combined",  # temperature | humidity | combined
+    "control_mode": "combined_or",  # temperature | humidity | combined_or | combined_and
     "fan_gpio_pin": 18,
     "fan_min_speed": 0.2,
     "fan_max_speed": 1.0,

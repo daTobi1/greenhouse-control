@@ -248,7 +248,8 @@ async function loadControlSettings() {
 
     document.getElementById('target-temp').value   = s.target_temperature  ?? 25;
     document.getElementById('target-hum').value    = s.target_humidity     ?? 65;
-    document.getElementById('control-mode').value  = s.control_mode        ?? 'combined';
+    const mode = s.control_mode === 'combined' ? 'combined_or' : (s.control_mode ?? 'combined_or');
+    document.getElementById('control-mode').value  = mode;
     document.getElementById('temp-range').value    = s.temp_control_range   ?? 5;
     document.getElementById('hum-range').value     = s.humidity_control_range ?? 20;
     document.getElementById('fan-min').value       = s.fan_min_speed        ?? 0.2;

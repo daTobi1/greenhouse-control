@@ -119,19 +119,24 @@ class FanController:
         speed_temp = 0.0
         speed_hum  = 0.0
 
-        if mode in ("temperature", "combined"):
+        if mode in ("temperature", "combined_or", "combined_and"):
             err = i_temp - target_temp
             # Exhaust fan cools only if outside is cooler than inside
             if err > 0 and o_temp < i_temp:
                 speed_temp = min(1.0, err / temp_range)
 
-        if mode in ("humidity", "combined"):
+        if mode in ("humidity", "combined_or", "combined_and"):
             err = i_hum - target_humidity
             # Exhaust fan reduces humidity only if outside is drier than inside
             if err > 0 and o_hum < i_hum:
                 speed_hum = min(1.0, err / humidity_range)
 
-        raw = max(speed_temp, speed_hum)
+        if mode == "combined_and":
+            # Both conditions must be active; use the lower of the two
+            raw = min(speed_temp, speed_hum)
+        else:
+            # OR: run if either condition is exceeded
+            raw = max(speed_temp, speed_hum)
 
         if raw <= 0:
             return 0.0
