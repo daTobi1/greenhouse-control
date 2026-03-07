@@ -1,9 +1,15 @@
 """
 Fan controller using RPi.GPIO PWM on a MOSFET-driven fan.
 
+Fan orientation: EXHAUST – the fan pushes stale air OUT of the greenhouse.
+Fresh outside air enters passively through vents/gaps. This means ventilating
+only makes sense when outside conditions are actually better than inside:
+  - Temperature:  outside must be cooler than inside
+  - Humidity:     outside must be drier than inside
+
 Proportional control algorithm:
   - Computes a 0..1 speed from the temperature/humidity error vs. target.
-  - Only ventilates when outside conditions would actually help.
+  - Only runs the fan when outside air would improve the inside condition.
   - Scales the result into the configured [fan_min, fan_max] range.
   - When raw_speed <= 0 the fan is switched off completely.
 """
@@ -115,12 +121,14 @@ class FanController:
 
         if mode in ("temperature", "combined"):
             err = i_temp - target_temp
-            if err > 0 and o_temp < i_temp:          # outside is cooler → helps
+            # Exhaust fan cools only if outside is cooler than inside
+            if err > 0 and o_temp < i_temp:
                 speed_temp = min(1.0, err / temp_range)
 
         if mode in ("humidity", "combined"):
             err = i_hum - target_humidity
-            if err > 0 and o_hum < i_hum:            # outside is drier → helps
+            # Exhaust fan reduces humidity only if outside is drier than inside
+            if err > 0 and o_hum < i_hum:
                 speed_hum = min(1.0, err / humidity_range)
 
         raw = max(speed_temp, speed_hum)

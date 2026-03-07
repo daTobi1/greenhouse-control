@@ -2,23 +2,23 @@
    CSS Variables & Reset
 ============================================================ */
 :root {
-  --bg:        #0f1a0f;
-  --bg2:       #162016;
-  --bg3:       #1e2d1e;
-  --card:      #1a271a;
-  --border:    #2a3d2a;
-  --accent:    #4caf50;
-  --accent2:   #81c784;
-  --accent3:   #2e7d32;
-  --danger:    #e53935;
-  --warn:      #fb8c00;
-  --text:      #e8f5e9;
-  --text2:     #a5d6a7;
-  --text3:     #6a8f6a;
-  --blue:      #42a5f5;
+  --bg:        #0d1117;
+  --bg2:       #161b22;
+  --bg3:       #21262d;
+  --card:      #161b22;
+  --border:    #30363d;
+  --accent:    #58a6ff;
+  --accent2:   #79c0ff;
+  --accent3:   #1f6feb;
+  --danger:    #f85149;
+  --warn:      #e3b341;
+  --text:      #e6edf3;
+  --text2:     #b1bac4;
+  --text3:     #8b949e;
+  --blue:      #58a6ff;
   --font:      'Segoe UI', system-ui, sans-serif;
   --radius:    10px;
-  --shadow:    0 2px 12px rgba(0,0,0,.4);
+  --shadow:    0 2px 16px rgba(0,0,0,.6);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -164,12 +164,31 @@ h1 { font-size: 1.1rem; font-weight: 600; color: var(--accent2); }
   gap: .5rem;
 }
 
+.value-row {
+  display: flex;
+  align-items: flex-end;
+  gap: .4rem;
+}
+
 .card-value {
   font-size: 2.6rem;
   font-weight: 700;
-  color: var(--accent2);
+  color: var(--text);
   line-height: 1;
 }
+
+.trend-badge {
+  font-size: .9rem;
+  font-weight: 600;
+  padding: .1rem .35rem;
+  border-radius: 4px;
+  margin-bottom: .25rem;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+.trend-up    { color: #f85149; background: #f8514918; }
+.trend-down  { color: #58a6ff; background: #58a6ff18; }
+.trend-stable{ color: #8b949e; background: #8b949e18; }
 
 .card-unit {
   font-size: 1rem;

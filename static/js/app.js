@@ -7,6 +7,33 @@ let charts = {};
 let pollTimer = null;
 let manualOpen = false;
 
+// Ring buffer (max 10 readings) per metric key for trend computation
+const trendHistory = {};
+
+function pushTrend(key, value) {
+  if (!trendHistory[key]) trendHistory[key] = [];
+  trendHistory[key].push(value);
+  if (trendHistory[key].length > 10) trendHistory[key].shift();
+}
+
+function renderTrend(elemId, key, threshold) {
+  const h = trendHistory[key];
+  const el = document.getElementById(elemId);
+  if (!el || !h || h.length < 2) return;
+  const delta = h[h.length - 1] - h[0];
+  const absDelta = Math.abs(delta);
+  if (absDelta < threshold) {
+    el.textContent = '→';
+    el.className = 'trend-badge trend-stable';
+  } else if (delta > 0) {
+    el.textContent = `▲ +${absDelta.toFixed(1)}`;
+    el.className = 'trend-badge trend-up';
+  } else {
+    el.textContent = `▼ ${delta.toFixed(1)}`;
+    el.className = 'trend-badge trend-down';
+  }
+}
+
 // ----------------------------------------------------------------
 // Clock
 // ----------------------------------------------------------------
@@ -64,10 +91,10 @@ function setGauge(fraction) {
     fillEl.setAttribute('d', arcPath(100, 100, 76, GAUGE_START, end));
   }
 
-  // Colour: green → yellow → red
-  let colour = '#4caf50';
-  if (fraction > 0.8) colour = '#e53935';
-  else if (fraction > 0.6) colour = '#fb8c00';
+  // Colour: blue → yellow → red
+  let colour = '#58a6ff';
+  if (fraction > 0.8) colour = '#f85149';
+  else if (fraction > 0.6) colour = '#e3b341';
   fillEl.style.stroke = colour;
 
   document.getElementById('gauge-text').textContent = pct + '%';
@@ -110,10 +137,22 @@ async function fetchSensors() {
     const hasBle  = inside || outside;
     setDot('dot-ble', hasBle ? 'ok' : 'warn');
 
-    updateSensorCard('in-temp',  inside,  'temperature', '°C');
-    updateSensorCard('in-hum',   inside,  'humidity',    '%');
-    updateSensorCard('out-temp', outside, 'temperature', '°C');
-    updateSensorCard('out-hum',  outside, 'humidity',    '%');
+    updateSensorCard('in-temp',  inside,  'temperature');
+    updateSensorCard('in-hum',   inside,  'humidity');
+    updateSensorCard('out-temp', outside, 'temperature');
+    updateSensorCard('out-hum',  outside, 'humidity');
+
+    // Push trend history
+    if (inside?.temperature != null)  pushTrend('in-temp',  inside.temperature);
+    if (inside?.humidity    != null)  pushTrend('in-hum',   inside.humidity);
+    if (outside?.temperature != null) pushTrend('out-temp', outside.temperature);
+    if (outside?.humidity    != null) pushTrend('out-hum',  outside.humidity);
+
+    // Render trend badges (temp: 0.3°C threshold, humidity: 1%)
+    renderTrend('trend-in-temp',  'in-temp',  0.3);
+    renderTrend('trend-in-hum',   'in-hum',   1.0);
+    renderTrend('trend-out-temp', 'out-temp', 0.3);
+    renderTrend('trend-out-hum',  'out-hum',  1.0);
 
     if (inside)  document.getElementById('in-temp-ts').textContent  = fmtAge(inside.timestamp);
     if (outside) document.getElementById('out-temp-ts').textContent = fmtAge(outside.timestamp);
@@ -130,7 +169,7 @@ async function fetchSensors() {
   }
 }
 
-function updateSensorCard(prefix, data, field, unit) {
+function updateSensorCard(prefix, data, field) {
   const el = document.getElementById(prefix);
   el.textContent = data ? fmtVal(data[field]) : '--';
 }
@@ -145,8 +184,17 @@ async function fetchFan() {
     const d = await r.json();
 
     setGauge(d.speed);
+    pushTrend('fan-speed', d.speed_percent);
+
+    // Trend label next to gauge sub-text
+    const trendH = trendHistory['fan-speed'];
+    let trendLabel = '';
+    if (trendH && trendH.length >= 2) {
+      const delta = trendH[trendH.length - 1] - trendH[0];
+      if (Math.abs(delta) >= 5) trendLabel = delta > 0 ? ' ▲' : ' ▼';
+    }
     document.getElementById('gauge-sub').textContent =
-      d.manual_override ? 'Manuell' : 'Auto';
+      (d.manual_override ? 'Manuell' : 'Auto') + trendLabel;
 
     const autoBtn   = document.getElementById('btn-auto');
     const manualBtn = document.getElementById('btn-manual');
