@@ -344,6 +344,12 @@
         <input type="number" id="ble-duration" min="5" max="30" value="10" />
       </div>
 
+      <h3>Updates</h3>
+      <div class="control-row">
+        <label>Automatisch prüfen (Tage, 0 = aus)</label>
+        <input type="number" id="update-interval-days" min="0" max="365" step="1" value="7" />
+      </div>
+
       <div class="modal-footer">
         <button class="btn" onclick="saveSettings()">Einstellungen speichern</button>
         <span id="settings-saved" class="saved-msg hidden">&#10003; Gespeichert</span>
