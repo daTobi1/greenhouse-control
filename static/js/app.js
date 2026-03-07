@@ -570,7 +570,7 @@ async function fetchTimelapse() {
     }
 
     // Update timelapse form from settings (interval stored in seconds, displayed in hours)
-    document.getElementById('tl-interval').value = formatDE((d.interval ?? 3600) / 3600, 2);
+    document.getElementById('tl-interval').value = formatDE((d.interval ?? 3600) / 3600, 4);
     document.getElementById('tl-capture-mode').value = d.capture_mode ?? 'still';
     document.getElementById('tl-clip-duration').value = d.clip_duration ?? 5;
     document.getElementById('tl-clip-fps').value = d.clip_fps ?? 10;
