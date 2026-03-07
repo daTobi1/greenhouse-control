@@ -492,6 +492,36 @@ async function loadResolutions(camIdx) {
     if ([...sel.options].some(o => o.value === saved)) sel.value = saved;
   } catch(e) {}
   sel.disabled = false;
+  await loadFps(camIdx, sel.value);
+}
+
+async function loadFps(camIdx, resolution) {
+  const sel   = document.getElementById('tl-clip-fps');
+  const saved = sel.value;
+  sel.innerHTML = '';
+  sel.disabled  = true;
+  const [w, h] = (resolution || '0x0').split('x').map(Number);
+  const fallback = [5, 10, 15, 20, 25, 30];
+  try {
+    const r = await fetch(`${API}/api/timelapse/fps?camera=${camIdx}&width=${w}&height=${h}`);
+    const d = await r.json();
+    const list = d.fps && d.fps.length ? d.fps : fallback;
+    list.forEach(fps => {
+      const opt = document.createElement('option');
+      opt.value = fps;
+      opt.textContent = `${fps} fps`;
+      sel.appendChild(opt);
+    });
+  } catch(e) {
+    fallback.forEach(fps => {
+      const opt = document.createElement('option');
+      opt.value = fps;
+      opt.textContent = `${fps} fps`;
+      sel.appendChild(opt);
+    });
+  }
+  if ([...sel.options].some(o => o.value === saved)) sel.value = saved;
+  sel.disabled = false;
 }
 
 async function fetchTimelapse() {

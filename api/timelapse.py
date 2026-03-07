@@ -108,6 +108,13 @@ async def detect_resolutions(camera: int = Query(0, ge=0)):
     return {"resolutions": resolutions}
 
 
+@router.get("/fps")
+async def detect_fps(camera: int = Query(0, ge=0), width: int = Query(0), height: int = Query(0)):
+    """Return FPS values the camera supports at the given resolution."""
+    fps_list = await asyncio.to_thread(state.camera_service.detect_fps, camera, width, height)
+    return {"fps": fps_list}
+
+
 @router.get("/video/{session}")
 async def get_video(session: str):
     """Serve a compiled timelapse video for download."""

@@ -252,13 +252,15 @@
       </div>
       <div class="control-row" data-tooltip="Aufnahmeauflösung. Nur von der Kamera unterstützte Auflösungen werden angezeigt. 'Kamera Standard' = Kamera wählt selbst.">
         <label>Auflösung</label>
-        <select id="tl-resolution">
+        <select id="tl-resolution" onchange="loadFps(document.getElementById('tl-cam-idx').value, this.value)">
           <option value="0x0">Kamera Standard</option>
         </select>
       </div>
-      <div class="control-row" data-tooltip="Bildrate der Kameraaufnahme (Frames pro Sekunde). Bei Clips bestimmt dies die Flüssigkeit des aufgenommenen Videos.">
+      <div class="control-row" data-tooltip="Bildrate der Kameraaufnahme. Zeigt nur die Werte die die Kamera bei der gewählten Auflösung unterstützt.">
         <label>Aufnahme-FPS</label>
-        <input type="number" id="tl-clip-fps" min="1" max="30" step="1" value="10" />
+        <select id="tl-clip-fps">
+          <option value="10">10 fps</option>
+        </select>
       </div>
 
       <div class="btn-row">

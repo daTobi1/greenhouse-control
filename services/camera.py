@@ -19,6 +19,8 @@ except ImportError:
     logger.warning("OpenCV not available – camera features disabled")
 
 
+COMMON_FPS = [5, 10, 15, 20, 24, 25, 30, 60]
+
 COMMON_RESOLUTIONS = [
     (320,  240,  "QVGA"),
     (640,  480,  "VGA"),
@@ -117,10 +119,10 @@ class CameraService:
             logger.error("Failed to read frame from camera")
             return None
 
-        filename = session_dir / f"frame_{self._frame_count:06d}.jpg"
+        filename = session_dir / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.jpg"
         cv2.imwrite(str(filename), frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
         self._frame_count += 1
-        logger.debug(f"Frame {self._frame_count} captured → {filename.name}")
+        logger.debug(f"Frame captured → {filename.name}")
         return str(filename)
 
     def capture_clip(self, duration: float = 5.0, clip_fps: int = 10) -> str | None:
@@ -142,7 +144,7 @@ class CameraService:
 
         w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        clip_path = session_dir / f"clip_{self._frame_count:06d}.mp4"
+        clip_path = session_dir / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
 
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         out = cv2.VideoWriter(str(clip_path), fourcc, float(clip_fps), (w, h))
@@ -197,8 +199,8 @@ class CameraService:
             logger.error(f"Session directory not found: {session_dir}")
             return None
 
-        clips  = sorted(session_dir.glob("clip_*.mp4"))
-        frames = sorted(session_dir.glob("frame_*.jpg"))
+        clips  = sorted(session_dir.glob("*.mp4"))
+        frames = sorted(session_dir.glob("*.jpg"))
 
         if not clips and not frames:
             logger.error("No frames or clips found in session")
@@ -263,8 +265,8 @@ class CameraService:
         for d in self._frames_dir.iterdir():
             if not d.is_dir():
                 continue
-            frames = sorted(d.glob("frame_*.jpg"))
-            clips  = sorted(d.glob("clip_*.mp4"))
+            frames = list(d.glob("*.jpg"))
+            clips  = list(d.glob("*.mp4"))
             count  = len(clips) if clips else len(frames)
             mode   = "clip" if clips else "still"
             output = self._output_dir / f"{d.name}.mp4"
@@ -314,6 +316,27 @@ class CameraService:
                 supported.append({"width": w, "height": h, "label": name})
         cap.release()
         return supported
+
+    def detect_fps(self, camera_index: int, width: int = 0, height: int = 0) -> list[int]:
+        """Return FPS values the camera supports at the given resolution."""
+        if not CV2_AVAILABLE:
+            return []
+        cap = cv2.VideoCapture(camera_index)
+        if not cap.isOpened():
+            return []
+        if width > 0 and height > 0:
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH,  width)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        supported = []
+        seen: set[int] = set()
+        for fps in COMMON_FPS:
+            cap.set(cv2.CAP_PROP_FPS, fps)
+            actual = round(cap.get(cv2.CAP_PROP_FPS))
+            if actual == fps and actual not in seen:
+                seen.add(actual)
+                supported.append(actual)
+        cap.release()
+        return sorted(supported)
 
     def delete_session(self, session: str) -> bool:
         session_dir = self._frames_dir / session
