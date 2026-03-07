@@ -232,11 +232,17 @@
       <div class="control-row" data-tooltip="Kamera für die Timelapse-Aufnahmen auswählen. Mit dem Pfeil-Button werden angeschlossene Kameras neu gesucht.">
         <label>Kamera</label>
         <div class="cam-select-wrap">
-          <select id="tl-cam-idx">
+          <select id="tl-cam-idx" onchange="loadResolutions(this.value)">
             <option value="0">Kamera 0</option>
           </select>
           <button class="btn-small" onclick="loadCameras()" title="Kameras suchen">&#8635;</button>
         </div>
+      </div>
+      <div class="control-row" data-tooltip="Aufnahmeauflösung. Nur von der Kamera unterstützte Auflösungen werden angezeigt. 'Kamera Standard' = Kamera wählt selbst.">
+        <label>Auflösung</label>
+        <select id="tl-resolution">
+          <option value="0x0">Kamera Standard</option>
+        </select>
       </div>
 
       <div class="btn-row">

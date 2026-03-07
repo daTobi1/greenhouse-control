@@ -464,6 +464,29 @@ async function loadCameras() {
     select.innerHTML = '<option value="0">Kamera 0</option>';
   }
   select.disabled = false;
+  await loadResolutions(select.value);
+}
+
+async function loadResolutions(camIdx) {
+  const sel = document.getElementById('tl-resolution');
+  sel.innerHTML = '<option value="0x0">Kamera Standard</option>';
+  sel.disabled = true;
+  try {
+    const r = await fetch(`${API}/api/timelapse/resolutions?camera=${camIdx}`);
+    const d = await r.json();
+    (d.resolutions || []).forEach(res => {
+      const opt = document.createElement('option');
+      opt.value = `${res.width}x${res.height}`;
+      opt.textContent = res.label;
+      sel.appendChild(opt);
+    });
+    // Restore saved resolution
+    const sr = await fetch(`${API}/api/settings`);
+    const s  = await sr.json();
+    const saved = `${s.camera_capture_width ?? 0}x${s.camera_capture_height ?? 0}`;
+    if ([...sel.options].some(o => o.value === saved)) sel.value = saved;
+  } catch(e) {}
+  sel.disabled = false;
 }
 
 async function fetchTimelapse() {
@@ -536,11 +559,18 @@ async function startTimelapse() {
   const intervalSecs  = Math.round(intervalHours * 3600);
   const fps           = parseInt(document.getElementById('tl-fps').value);
   const camIdx        = parseInt(document.getElementById('tl-cam-idx').value);
+  const [capW, capH]  = document.getElementById('tl-resolution').value.split('x').map(Number);
 
   await fetch(`${API}/api/settings`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ timelapse_interval: intervalSecs, timelapse_fps: fps, camera_index: camIdx })
+    body: JSON.stringify({
+      timelapse_interval: intervalSecs,
+      timelapse_fps: fps,
+      camera_index: camIdx,
+      camera_capture_width: capW,
+      camera_capture_height: capH,
+    })
   });
 
   const r = await fetch(`${API}/api/timelapse/start`, {

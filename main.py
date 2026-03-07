@@ -33,6 +33,8 @@ async def lifespan(app: FastAPI):
         frames_dir=f"{tl_path}/frames",
         output_dir=f"{tl_path}/output",
         camera_index=int(settings.get("camera_index", 0)),
+        capture_width=int(settings.get("camera_capture_width", 0)),
+        capture_height=int(settings.get("camera_capture_height", 0)),
     )
 
     # Fan: read GPIO pin from DB and initialise

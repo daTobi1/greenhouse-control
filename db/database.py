@@ -29,6 +29,8 @@ DEFAULT_SETTINGS = {
     "update_check_interval_days": 7,  # 0 = deaktiviert
     "timelapse_path": "timelapse",
     "timelapse_share_enabled": False,
+    "camera_capture_width": 0,   # 0 = camera default
+    "camera_capture_height": 0,
 }
 
 

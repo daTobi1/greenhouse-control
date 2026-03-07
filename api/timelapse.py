@@ -1,7 +1,7 @@
 import asyncio
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel
 
@@ -96,6 +96,13 @@ async def detect_cameras():
     """Scan for available camera devices (non-blocking thread)."""
     cameras = await asyncio.to_thread(state.camera_service.detect_cameras)
     return {"cameras": cameras}
+
+
+@router.get("/resolutions")
+async def detect_resolutions(camera: int = Query(0, ge=0)):
+    """Return resolutions supported by the given camera index."""
+    resolutions = await asyncio.to_thread(state.camera_service.detect_resolutions, camera)
+    return {"resolutions": resolutions}
 
 
 @router.get("/video/{session}")

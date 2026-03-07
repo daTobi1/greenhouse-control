@@ -110,9 +110,18 @@ class Scheduler:
                 settings = await self._db.get_all_settings()
                 active   = settings.get("timelapse_active", False)
                 interval = float(settings.get("timelapse_interval", 300))
+                tl_path  = settings.get("timelapse_path", "timelapse")
                 cam_idx  = int(settings.get("camera_index", 0))
+                cap_w    = int(settings.get("camera_capture_width", 0))
+                cap_h    = int(settings.get("camera_capture_height", 0))
 
-                self._cam.setup(camera_index=cam_idx)
+                self._cam.setup(
+                    frames_dir=f"{tl_path}/frames",
+                    output_dir=f"{tl_path}/output",
+                    camera_index=cam_idx,
+                    capture_width=cap_w,
+                    capture_height=cap_h,
+                )
 
                 if active:
                     if not self._cam.is_capturing:

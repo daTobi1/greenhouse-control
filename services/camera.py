@@ -18,11 +18,27 @@ except ImportError:
     logger.warning("OpenCV not available – camera features disabled")
 
 
+COMMON_RESOLUTIONS = [
+    (320,  240,  "QVGA"),
+    (640,  480,  "VGA"),
+    (800,  600,  "SVGA"),
+    (1024, 768,  "XGA"),
+    (1280, 720,  "HD 720p"),
+    (1280, 960,  ""),
+    (1600, 900,  "HD+"),
+    (1920, 1080, "Full HD"),
+    (2560, 1440, "QHD"),
+    (3840, 2160, "4K UHD"),
+]
+
+
 class CameraService:
     def __init__(self):
         self._frames_dir = Path("timelapse/frames")
         self._output_dir = Path("timelapse/output")
         self._camera_index: int = 0
+        self._capture_width: int = 0
+        self._capture_height: int = 0
         self._session: str | None = None
         self._frame_count: int = 0
 
@@ -31,10 +47,14 @@ class CameraService:
         frames_dir: str = "timelapse/frames",
         output_dir: str = "timelapse/output",
         camera_index: int = 0,
+        capture_width: int = 0,
+        capture_height: int = 0,
     ):
         self._frames_dir = Path(frames_dir)
         self._output_dir = Path(output_dir)
         self._camera_index = camera_index
+        self._capture_width = capture_width
+        self._capture_height = capture_height
         self._frames_dir.mkdir(parents=True, exist_ok=True)
         self._output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -82,6 +102,9 @@ class CameraService:
 
         session_dir = self._frames_dir / self._session
         cap = cv2.VideoCapture(self._camera_index)
+        if self._capture_width > 0 and self._capture_height > 0:
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH,  self._capture_width)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._capture_height)
         if not cap.isOpened():
             logger.error("Cannot open camera")
             return None
@@ -202,6 +225,27 @@ class CameraService:
                 if ret:
                     cameras.append({"index": i, "name": f"Kamera {i}"})
         return cameras
+
+    def detect_resolutions(self, camera_index: int) -> list[dict]:
+        """Return resolutions that the camera actually supports."""
+        if not CV2_AVAILABLE:
+            return []
+        cap = cv2.VideoCapture(camera_index)
+        if not cap.isOpened():
+            return []
+        supported = []
+        seen: set[tuple] = set()
+        for w, h, label in COMMON_RESOLUTIONS:
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH,  w)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+            aw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            ah = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            if (aw, ah) == (w, h) and (aw, ah) not in seen:
+                seen.add((aw, ah))
+                name = f"{w}×{h}" + (f" ({label})" if label else "")
+                supported.append({"width": w, "height": h, "label": name})
+        cap.release()
+        return supported
 
     def delete_session(self, session: str) -> bool:
         session_dir = self._frames_dir / session
