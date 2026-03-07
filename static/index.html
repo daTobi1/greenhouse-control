@@ -352,9 +352,12 @@
       </div>
 
       <h3>Timelapse</h3>
-      <div class="control-row" data-tooltip="Ordner in dem Timelapse-Aufnahmen und Videos gespeichert werden. Relativer oder absoluter Pfad.">
+      <div class="control-row" data-tooltip="Ordner in dem Timelapse-Aufnahmen und Videos gespeichert werden.">
         <label>Speicherpfad</label>
-        <input type="text" id="timelapse-path" placeholder="timelapse" style="width:100%;max-width:220px" />
+        <div style="display:flex;gap:.3rem;align-items:center;flex:1;max-width:220px">
+          <input type="text" id="timelapse-path" placeholder="timelapse" style="width:100%" />
+          <button class="btn-small" onclick="openFolderPicker()" title="Ordner auswählen">&#128193;</button>
+        </div>
       </div>
       <div class="control-row" data-tooltip="Ermöglicht den Zugriff auf Timelapse-Videos über das lokale Netzwerk via Browser. URL wird unten angezeigt.">
         <label>Netzwerkfreigabe</label>
@@ -391,6 +394,38 @@
 </div>
 
 <div id="toast" class="toast hidden"></div>
+
+<!-- ================================================================
+     FOLDER PICKER MODAL
+================================================================ -->
+<div id="folder-picker-overlay" class="overlay hidden" onclick="closeFolderPicker(event)">
+  <div class="modal" style="width:min(520px,95vw)" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Ordner auswählen</h2>
+      <button class="btn-icon" onclick="closeFolderPicker()">&#10005;</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Breadcrumb path -->
+      <div id="fp-path" class="fp-path"></div>
+
+      <!-- Directory listing -->
+      <div id="fp-list" class="fp-list"></div>
+
+      <!-- New folder row -->
+      <div class="fp-mkdir-row">
+        <input type="text" id="fp-new-name" placeholder="Neuer Ordner…" class="fp-new-input"
+               onkeydown="if(event.key==='Enter') fpMkdir()" />
+        <button class="btn-small" onclick="fpMkdir()">Erstellen</button>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="fpSelect()">Diesen Ordner auswählen</button>
+      <button class="btn btn-secondary" onclick="closeFolderPicker()">Abbrechen</button>
+    </div>
+  </div>
+</div>
 
 <script src="/js/app.js"></script>
 </body>

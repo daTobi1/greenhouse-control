@@ -597,6 +597,65 @@ select {
 }
 
 /* ============================================================
+   Folder Picker
+============================================================ */
+.fp-path {
+  font-size: .78rem;
+  color: var(--text2);
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: .35rem .6rem;
+  margin-bottom: .6rem;
+  word-break: break-all;
+  font-family: monospace;
+}
+
+.fp-list {
+  min-height: 180px;
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.fp-item {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .45rem .7rem;
+  cursor: pointer;
+  font-size: .85rem;
+  color: var(--text2);
+  border-bottom: 1px solid var(--border);
+  transition: background .15s;
+}
+.fp-item:last-child { border-bottom: none; }
+.fp-item:hover { background: var(--bg3); color: var(--text); }
+.fp-item .fp-icon { font-size: 1rem; flex-shrink: 0; }
+.fp-item.fp-up { color: var(--text3); font-style: italic; }
+.fp-empty { padding: 1rem; color: var(--text3); font-size: .82rem; text-align: center; }
+
+.fp-mkdir-row {
+  display: flex;
+  gap: .4rem;
+  margin-top: .7rem;
+  align-items: center;
+}
+
+.fp-new-input {
+  flex: 1;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 5px;
+  padding: .3rem .5rem;
+  font-size: .85rem;
+}
+.fp-new-input:focus { outline: 1px solid var(--accent); }
+
+/* ============================================================
    Tooltip
 ============================================================ */
 .tooltip {

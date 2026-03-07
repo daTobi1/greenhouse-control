@@ -68,13 +68,14 @@ app.add_middleware(
 )
 
 # API routers
-from api import sensors, fans, timelapse, settings as settings_api, update  # noqa: E402
+from api import sensors, fans, timelapse, settings as settings_api, update, filesystem  # noqa: E402
 
-app.include_router(sensors.router,      prefix="/api/sensors",   tags=["sensors"])
-app.include_router(fans.router,         prefix="/api/fans",      tags=["fans"])
-app.include_router(timelapse.router,    prefix="/api/timelapse", tags=["timelapse"])
-app.include_router(settings_api.router, prefix="/api/settings",  tags=["settings"])
-app.include_router(update.router,       prefix="/api/update",    tags=["update"])
+app.include_router(sensors.router,      prefix="/api/sensors",    tags=["sensors"])
+app.include_router(fans.router,         prefix="/api/fans",       tags=["fans"])
+app.include_router(timelapse.router,    prefix="/api/timelapse",  tags=["timelapse"])
+app.include_router(settings_api.router, prefix="/api/settings",   tags=["settings"])
+app.include_router(update.router,       prefix="/api/update",     tags=["update"])
+app.include_router(filesystem.router,   prefix="/api/fs",         tags=["filesystem"])
 
 # Static dashboard (must be last)
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

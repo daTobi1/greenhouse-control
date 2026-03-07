@@ -776,6 +776,84 @@ async function loadSettingsModal() {
   } catch(e) {}
 }
 
+// ----------------------------------------------------------------
+// Folder Picker
+// ----------------------------------------------------------------
+let _fpCurrentPath = '';
+
+async function openFolderPicker() {
+  const current = document.getElementById('timelapse-path').value.trim() || 'timelapse';
+  document.getElementById('folder-picker-overlay').classList.remove('hidden');
+  await fpBrowse(current);
+}
+
+function closeFolderPicker(event) {
+  if (event && event.target !== document.getElementById('folder-picker-overlay')) return;
+  document.getElementById('folder-picker-overlay').classList.add('hidden');
+  document.getElementById('fp-new-name').value = '';
+}
+
+async function fpBrowse(path) {
+  try {
+    const r = await fetch(`${API}/api/fs/browse?path=${encodeURIComponent(path)}`);
+    if (!r.ok) { showToast('Zugriff verweigert'); return; }
+    const d = await r.json();
+    _fpCurrentPath = d.path;
+
+    document.getElementById('fp-path').textContent = d.path;
+
+    const list = document.getElementById('fp-list');
+    let html = '';
+    if (d.parent) {
+      html += `<div class="fp-item fp-up" onclick="fpBrowse('${esc(d.parent)}')">
+        <span class="fp-icon">&#8593;</span> Übergeordneter Ordner
+      </div>`;
+    }
+    if (d.dirs.length === 0 && !d.parent) {
+      html += '<div class="fp-empty">Keine Unterordner</div>';
+    }
+    d.dirs.forEach(dir => {
+      html += `<div class="fp-item" onclick="fpBrowse('${esc(dir.path)}')">
+        <span class="fp-icon">&#128193;</span>${dir.name}
+      </div>`;
+    });
+    if (d.dirs.length === 0 && d.parent) {
+      html += '<div class="fp-empty">Keine Unterordner vorhanden</div>';
+    }
+    list.innerHTML = html;
+  } catch(e) {
+    showToast('Fehler beim Laden des Verzeichnisses');
+  }
+}
+
+async function fpMkdir() {
+  const name = document.getElementById('fp-new-name').value.trim();
+  if (!name) return;
+  const newPath = _fpCurrentPath.replace(/\\/g, '/').replace(/\/$/, '') + '/' + name;
+  try {
+    const r = await fetch(`${API}/api/fs/mkdir`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: newPath }),
+    });
+    if (!r.ok) { showToast('Ordner konnte nicht erstellt werden'); return; }
+    document.getElementById('fp-new-name').value = '';
+    await fpBrowse(newPath);
+  } catch(e) {
+    showToast('Fehler beim Erstellen');
+  }
+}
+
+function fpSelect() {
+  document.getElementById('timelapse-path').value = _fpCurrentPath;
+  document.getElementById('folder-picker-overlay').classList.add('hidden');
+  document.getElementById('fp-new-name').value = '';
+}
+
+function esc(str) {
+  return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
 function updateShareUrl(enabled) {
   const wrap = document.getElementById('share-url-wrap');
   if (enabled) {
