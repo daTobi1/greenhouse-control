@@ -360,8 +360,15 @@ select {
 /* ============================================================
    Charts
 ============================================================ */
-.chart-card { display: flex; flex-direction: column; }
-.chart-card canvas { flex: 1; }
+.chart-card {
+  display: flex;
+  flex-direction: column;
+  height: clamp(220px, 30vh, 420px);
+}
+.chart-card canvas {
+  flex: 1;
+  min-height: 0;
+}
 
 .chart-range {
   background: var(--bg3);

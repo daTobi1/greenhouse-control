@@ -277,21 +277,46 @@ async function saveControlSettings() {
 // ----------------------------------------------------------------
 // Charts
 // ----------------------------------------------------------------
+
+// Linear regression trendline over an array of values (nulls tolerated)
+function linearRegression(data) {
+  const valid = data.map((v, i) => v != null ? { x: i, y: v } : null).filter(Boolean);
+  if (valid.length < 2) return data.map(() => null);
+  const n     = valid.length;
+  const xMean = valid.reduce((s, p) => s + p.x, 0) / n;
+  const yMean = valid.reduce((s, p) => s + p.y, 0) / n;
+  let num = 0, den = 0;
+  valid.forEach(p => {
+    num += (p.x - xMean) * (p.y - yMean);
+    den += (p.x - xMean) ** 2;
+  });
+  const slope     = den ? num / den : 0;
+  const intercept = yMean - slope * xMean;
+  return data.map((_, i) => parseFloat((slope * i + intercept).toFixed(2)));
+}
+
+const TREND_DATASET = {
+  label: 'Trend', data: [],
+  borderColor: 'rgba(255,255,255,0.3)', borderDash: [5, 4],
+  borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0,
+};
+
 const CHART_DEFAULTS = {
   type: 'line',
   options: {
     responsive: true,
     maintainAspectRatio: false,
     animation: false,
-    plugins: { legend: { labels: { color: '#a5d6a7', boxWidth: 12 } } },
+    plugins: { legend: { labels: { color: '#8b949e', boxWidth: 12 } } },
     scales: {
       x: {
-        ticks: { color: '#6a8f6a', maxTicksLimit: 8, maxRotation: 0 },
-        grid:  { color: '#1e2d1e' },
+        ticks: { color: '#8b949e', maxTicksLimit: 8, maxRotation: 0 },
+        grid:  { color: '#21262d' },
       },
       y: {
-        ticks: { color: '#6a8f6a' },
-        grid:  { color: '#1e2d1e' },
+        ticks: { color: '#8b949e' },
+        grid:  { color: '#21262d' },
+        grace: '5%',   // auto-adds 5% padding above/below data range
       }
     }
   }
@@ -308,28 +333,31 @@ function makeChart(canvasId, label1, label2, colour1, colour2) {
           borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3 },
         { label: label2, data: [], borderColor: colour2, backgroundColor: colour2 + '22',
           borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3 },
+        { ...TREND_DATASET },
       ]
     },
-    options: { ...CHART_DEFAULTS.options, plugins: { ...CHART_DEFAULTS.options.plugins } }
+    options: { ...CHART_DEFAULTS.options }
   });
 }
 
 function initCharts() {
-  charts.temp = makeChart('chart-temp', 'Innen (°C)', 'Außen (°C)', '#ef5350', '#42a5f5');
-  charts.hum  = makeChart('chart-hum',  'Innen (%)',  'Außen (%)',  '#4caf50', '#81c784');
+  charts.temp = makeChart('chart-temp', 'Innen (°C)', 'Außen (°C)', '#ef5350', '#58a6ff');
+  charts.hum  = makeChart('chart-hum',  'Innen (%)',  'Außen (%)',  '#3fb950', '#58a6ff');
 
-  // Fan chart (single dataset)
+  // Fan chart (data + trendline)
   const ctx3 = document.getElementById('chart-fan').getContext('2d');
   charts.fan = new Chart(ctx3, {
     ...CHART_DEFAULTS,
     data: {
       labels: [],
-      datasets: [{
-        label: 'Lüfter (%)', data: [],
-        borderColor: '#ffb300', backgroundColor: '#ffb30022',
-        borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3
-      }]
-    }
+      datasets: [
+        { label: 'Lüfter (%)', data: [],
+          borderColor: '#e3b341', backgroundColor: '#e3b34122',
+          borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3 },
+        { ...TREND_DATASET },
+      ]
+    },
+    options: { ...CHART_DEFAULTS.options }
   });
 }
 
@@ -353,28 +381,39 @@ async function loadHistory() {
     const outside = sData.outside || [];
 
     const tLabels = inside.map(r => tsToLabel(r.timestamp));
-    charts.temp.data.labels         = tLabels;
-    charts.temp.data.datasets[0].data = inside.map(r => r.temperature);
-    charts.temp.data.datasets[1].data = (() => {
-      // Align outside to inside timestamps (simple approach)
+
+    // Temperature chart
+    const inTempData  = inside.map(r => r.temperature);
+    const outTempData = (() => {
       const oMap = {};
       outside.forEach(r => { oMap[tsToLabel(r.timestamp)] = r.temperature; });
       return tLabels.map(l => oMap[l] ?? null);
     })();
+    charts.temp.data.labels           = tLabels;
+    charts.temp.data.datasets[0].data = inTempData;
+    charts.temp.data.datasets[1].data = outTempData;
+    charts.temp.data.datasets[2].data = linearRegression(inTempData);
     charts.temp.update();
 
-    charts.hum.data.labels          = tLabels;
-    charts.hum.data.datasets[0].data  = inside.map(r => r.humidity);
-    charts.hum.data.datasets[1].data  = (() => {
+    // Humidity chart
+    const inHumData  = inside.map(r => r.humidity);
+    const outHumData = (() => {
       const oMap = {};
       outside.forEach(r => { oMap[tsToLabel(r.timestamp)] = r.humidity; });
       return tLabels.map(l => oMap[l] ?? null);
     })();
+    charts.hum.data.labels           = tLabels;
+    charts.hum.data.datasets[0].data = inHumData;
+    charts.hum.data.datasets[1].data = outHumData;
+    charts.hum.data.datasets[2].data = linearRegression(inHumData);
     charts.hum.update();
 
-    const events = fData.events || [];
-    charts.fan.data.labels            = events.map(e => tsToLabel(e.timestamp));
-    charts.fan.data.datasets[0].data  = events.map(e => Math.round(e.speed * 100));
+    // Fan speed chart
+    const events  = fData.events || [];
+    const fanData = events.map(e => Math.round(e.speed * 100));
+    charts.fan.data.labels           = events.map(e => tsToLabel(e.timestamp));
+    charts.fan.data.datasets[0].data = fanData;
+    charts.fan.data.datasets[1].data = linearRegression(fanData);
     charts.fan.update();
 
   } catch(e) {
