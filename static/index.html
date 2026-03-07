@@ -158,12 +158,13 @@
         </div>
       </div>
 
-      <div class="control-row" data-tooltip="Mindest- und Maximaldrehzahl des Lüfters (0 = aus, 1 = 100 %). Unterhalb des Minimums wird der Lüfter komplett abgeschaltet.">
+      <div class="control-row" data-tooltip="Mindest- und Maximaldrehzahl des Lüfters in Prozent. Unterhalb des Minimums wird der Lüfter komplett abgeschaltet.">
         <label>Lüfter min / max</label>
         <div class="input-group compact">
-          <input type="text" inputmode="decimal" id="fan-min" placeholder="0,2" />
-          <span>/</span>
-          <input type="text" inputmode="decimal" id="fan-max" placeholder="1,0" />
+          <input type="text" inputmode="decimal" id="fan-min" placeholder="20" />
+          <span>%&nbsp;/</span>
+          <input type="text" inputmode="decimal" id="fan-max" placeholder="100" />
+          <span class="unit">%</span>
         </div>
       </div>
 

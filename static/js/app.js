@@ -309,8 +309,8 @@ async function loadControlSettings() {
     document.getElementById('control-mode').value  = mode;
     document.getElementById('temp-range').value    = formatDE(s.temp_control_range   ?? 5,  1);
     document.getElementById('hum-range').value     = s.humidity_control_range ?? 20;
-    document.getElementById('fan-min').value       = formatDE(s.fan_min_speed        ?? 0.2, 2);
-    document.getElementById('fan-max').value       = formatDE(s.fan_max_speed        ?? 1.0, 2);
+    document.getElementById('fan-min').value       = formatDE((s.fan_min_speed ?? 0.2) * 100, 0);
+    document.getElementById('fan-max').value       = formatDE((s.fan_max_speed ?? 1.0) * 100, 0);
   } catch(e) {}
 }
 
@@ -321,8 +321,8 @@ async function saveControlSettings() {
     control_mode:            document.getElementById('control-mode').value,
     temp_control_range:      parseDE(document.getElementById('temp-range').value),
     humidity_control_range:  parseFloat(document.getElementById('hum-range').value),
-    fan_min_speed:           parseDE(document.getElementById('fan-min').value),
-    fan_max_speed:           parseDE(document.getElementById('fan-max').value),
+    fan_min_speed:           parseDE(document.getElementById('fan-min').value) / 100,
+    fan_max_speed:           parseDE(document.getElementById('fan-max').value) / 100,
   };
   await fetch(`${API}/api/settings`, {
     method: 'PUT',
