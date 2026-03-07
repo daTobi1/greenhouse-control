@@ -599,7 +599,6 @@ async function checkUpdate() {
       document.getElementById('upd-status-text').textContent = 'Update verfügbar';
       document.getElementById('btn-do-update').disabled = false;
       _updateAvailable = true;
-      document.getElementById('btn-update').style.display = '';
       document.getElementById('update-badge').classList.remove('hidden');
     } else if (d.up_to_date) {
       document.getElementById('upd-status-text').textContent = 'Aktuell – kein Update nötig';
@@ -765,9 +764,7 @@ async function init() {
   setInterval(loadHistory, 120_000);
   // Reload sessions every 30 seconds
   setInterval(loadSessions, 30_000);
-  // Check for updates on load and every 10 minutes
-  checkUpdate();
-  setInterval(checkUpdate, 600_000);
+  // Update check only on manual button click
 }
 
 document.addEventListener('DOMContentLoaded', init);
