@@ -1,0 +1,7 @@
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+aiosqlite>=0.20.0
+bleak>=0.21.0
+opencv-python-headless>=4.9.0
+# RPi.GPIO is pre-installed on Raspberry Pi OS
+# If needed: pip install RPi.GPIO

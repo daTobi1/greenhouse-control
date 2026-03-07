@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gewächshaus Steuerung</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- ================================================================
+     HEADER
+================================================================ -->
+<header>
+  <div class="header-left">
+    <span class="logo">&#9752;</span>
+    <h1>Gewächshaus Steuerung</h1>
+  </div>
+  <div class="header-right">
+    <span class="status-dot" id="dot-ble" title="Bluetooth"></span>
+    <span class="status-label" id="lbl-ble">BLE</span>
+    <span class="status-dot" id="dot-cam" title="Kamera"></span>
+    <span class="status-label" id="lbl-cam">Kamera</span>
+    <span id="clock" class="clock"></span>
+    <button class="btn-icon" onclick="openSettings()" title="Einstellungen">&#9881;</button>
+  </div>
+</header>
+
+<!-- ================================================================
+     MAIN CONTENT
+================================================================ -->
+<main>
+
+  <!-- Sensor Cards -->
+  <section class="sensor-grid">
+    <div class="card sensor-card" id="card-in-temp">
+      <div class="card-label">Innen &mdash; Temperatur</div>
+      <div class="card-value" id="in-temp">--</div>
+      <div class="card-unit">°C</div>
+      <div class="card-meta">
+        <span id="in-temp-bat">Batterie: --</span>
+        <span id="in-temp-ts">--</span>
+      </div>
+    </div>
+    <div class="card sensor-card" id="card-in-hum">
+      <div class="card-label">Innen &mdash; Feuchtigkeit</div>
+      <div class="card-value" id="in-hum">--</div>
+      <div class="card-unit">%</div>
+      <div class="card-meta">
+        <span></span>
+        <span id="in-hum-ts">--</span>
+      </div>
+    </div>
+    <div class="card sensor-card" id="card-out-temp">
+      <div class="card-label">Außen &mdash; Temperatur</div>
+      <div class="card-value" id="out-temp">--</div>
+      <div class="card-unit">°C</div>
+      <div class="card-meta">
+        <span id="out-temp-bat">Batterie: --</span>
+        <span id="out-temp-ts">--</span>
+      </div>
+    </div>
+    <div class="card sensor-card" id="card-out-hum">
+      <div class="card-label">Außen &mdash; Feuchtigkeit</div>
+      <div class="card-value" id="out-hum">--</div>
+      <div class="card-unit">%</div>
+      <div class="card-meta">
+        <span></span>
+        <span id="out-hum-ts">--</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Fan + Control -->
+  <section class="control-grid">
+
+    <!-- Fan gauge card -->
+    <div class="card fan-card">
+      <div class="card-label">Lüfter</div>
+      <div class="gauge-container">
+        <svg viewBox="0 0 200 200" class="gauge-svg">
+          <path class="gauge-bg"    id="gauge-bg-path"   />
+          <path class="gauge-fill"  id="gauge-fill-path" />
+          <text x="100" y="112" class="gauge-text" id="gauge-text">0%</text>
+          <text x="100" y="132" class="gauge-sub"  id="gauge-sub">Auto</text>
+        </svg>
+      </div>
+      <div class="fan-controls">
+        <button class="btn" id="btn-auto"   onclick="setFanAuto()">Automatik</button>
+        <button class="btn btn-secondary" id="btn-manual" onclick="openManual()">Manuell</button>
+      </div>
+      <div id="manual-slider-wrap" class="manual-slider hidden">
+        <label>Geschwindigkeit: <span id="manual-speed-label">0%</span></label>
+        <input type="range" id="manual-speed" min="0" max="100" value="0"
+               oninput="document.getElementById('manual-speed-label').textContent=this.value+'%'"
+               onchange="setManualSpeed(this.value/100)" />
+      </div>
+    </div>
+
+    <!-- Target settings card -->
+    <div class="card control-card">
+      <div class="card-label">Regelung</div>
+
+      <div class="control-row">
+        <label>Ziel-Temperatur</label>
+        <div class="input-group">
+          <input type="number" id="target-temp" min="-10" max="50" step="0.5" />
+          <span class="unit">°C</span>
+        </div>
+      </div>
+
+      <div class="control-row">
+        <label>Ziel-Feuchtigkeit</label>
+        <div class="input-group">
+          <input type="number" id="target-hum" min="0" max="100" step="1" />
+          <span class="unit">%</span>
+        </div>
+      </div>
+
+      <div class="control-row">
+        <label>Modus</label>
+        <select id="control-mode">
+          <option value="combined">Kombiniert</option>
+          <option value="temperature">Nur Temperatur</option>
+          <option value="humidity">Nur Feuchtigkeit</option>
+        </select>
+      </div>
+
+      <div class="control-row">
+        <label>Temp.-Regelbereich</label>
+        <div class="input-group">
+          <input type="number" id="temp-range" min="1" max="20" step="0.5" />
+          <span class="unit">°C</span>
+        </div>
+      </div>
+
+      <div class="control-row">
+        <label>Feuchte-Regelbereich</label>
+        <div class="input-group">
+          <input type="number" id="hum-range" min="1" max="50" step="1" />
+          <span class="unit">%</span>
+        </div>
+      </div>
+
+      <div class="control-row">
+        <label>Lüfter min / max</label>
+        <div class="input-group compact">
+          <input type="number" id="fan-min" min="0" max="1" step="0.05" placeholder="min" />
+          <span>/</span>
+          <input type="number" id="fan-max" min="0" max="1" step="0.05" placeholder="max" />
+        </div>
+      </div>
+
+      <button class="btn full-width" onclick="saveControlSettings()">Speichern</button>
+    </div>
+
+  </section>
+
+  <!-- Charts -->
+  <section class="charts-grid">
+    <div class="card chart-card">
+      <div class="card-label">Temperaturverlauf
+        <select class="chart-range" id="chart-hours" onchange="loadHistory()">
+          <option value="6">6 Std.</option>
+          <option value="24" selected>24 Std.</option>
+          <option value="48">48 Std.</option>
+          <option value="168">7 Tage</option>
+        </select>
+      </div>
+      <canvas id="chart-temp"></canvas>
+    </div>
+    <div class="card chart-card">
+      <div class="card-label">Feuchtigkeitsverlauf</div>
+      <canvas id="chart-hum"></canvas>
+    </div>
+    <div class="card chart-card">
+      <div class="card-label">Lüftergeschwindigkeit</div>
+      <canvas id="chart-fan"></canvas>
+    </div>
+  </section>
+
+  <!-- Timelapse -->
+  <section class="timelapse-grid">
+
+    <div class="card timelapse-card">
+      <div class="card-label">Timelapse</div>
+
+      <div class="tl-status">
+        <span id="tl-status-dot" class="status-dot"></span>
+        <span id="tl-status-text">Inaktiv</span>
+        <span id="tl-frame-count" class="tl-frames"></span>
+      </div>
+
+      <div class="control-row">
+        <label>Intervall (Sekunden)</label>
+        <input type="number" id="tl-interval" min="5" max="86400" step="5" value="300" />
+      </div>
+      <div class="control-row">
+        <label>Bildrate (FPS)</label>
+        <input type="number" id="tl-fps" min="1" max="60" value="25" />
+      </div>
+      <div class="control-row">
+        <label>Kamera-Index</label>
+        <input type="number" id="tl-cam-idx" min="0" max="10" value="0" />
+      </div>
+
+      <div class="btn-row">
+        <button class="btn"           id="btn-tl-start" onclick="startTimelapse()">Starten</button>
+        <button class="btn btn-danger" id="btn-tl-stop"  onclick="stopTimelapse()" disabled>Stoppen</button>
+      </div>
+
+      <div class="card-label" style="margin-top:1rem">Aufnahmen</div>
+      <div id="session-list" class="session-list"></div>
+    </div>
+
+    <div class="card camera-card">
+      <div class="card-label">Kamera-Vorschau
+        <button class="btn-small" onclick="refreshPreview()">&#8635;</button>
+      </div>
+      <div class="preview-wrap">
+        <img id="camera-preview" src="" alt="Kein Bild" class="camera-img" />
+        <div id="preview-placeholder" class="preview-placeholder">Kamera nicht verfügbar</div>
+      </div>
+    </div>
+
+  </section>
+
+</main>
+
+<!-- ================================================================
+     SETTINGS MODAL
+================================================================ -->
+<div id="settings-overlay" class="overlay hidden" onclick="closeSettings(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Einstellungen</h2>
+      <button class="btn-icon" onclick="closeSettings()">&#10005;</button>
+    </div>
+    <div class="modal-body">
+
+      <h3>SwitchBot Sensoren</h3>
+      <p class="hint">MAC-Adressen der Sensoren (Format: AA:BB:CC:DD:EE:FF)</p>
+
+      <div class="control-row">
+        <label>Innen-Sensor MAC</label>
+        <input type="text" id="inside-mac" placeholder="AA:BB:CC:DD:EE:FF" class="mac-input" />
+      </div>
+      <div class="control-row">
+        <label>Außen-Sensor MAC</label>
+        <input type="text" id="outside-mac" placeholder="AA:BB:CC:DD:EE:FF" class="mac-input" />
+      </div>
+
+      <button class="btn btn-secondary" onclick="discoverSensors()">
+        &#128268; Sensoren suchen (10s)
+      </button>
+      <div id="discover-result" class="discover-result"></div>
+
+      <h3>GPIO / Hardware</h3>
+      <div class="control-row">
+        <label>Lüfter GPIO-Pin (BCM)</label>
+        <input type="number" id="fan-gpio" min="1" max="27" value="18" />
+      </div>
+      <div class="control-row">
+        <label>BLE Scan-Intervall (s)</label>
+        <input type="number" id="ble-interval" min="10" max="300" value="30" />
+      </div>
+      <div class="control-row">
+        <label>BLE Scan-Dauer (s)</label>
+        <input type="number" id="ble-duration" min="5" max="30" value="10" />
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn" onclick="saveSettings()">Einstellungen speichern</button>
+        <span id="settings-saved" class="saved-msg hidden">&#10003; Gespeichert</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
