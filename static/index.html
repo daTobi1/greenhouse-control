@@ -23,6 +23,8 @@
     <span class="status-dot" id="dot-cam" title="Kamera"></span>
     <span class="status-label" id="lbl-cam">Kamera</span>
     <span id="clock" class="clock"></span>
+    <button class="btn-icon" id="btn-update" onclick="openUpdate()" title="Update prüfen" style="display:none">&#8593;</button>
+    <span id="update-badge" class="update-badge hidden">Update</span>
     <button class="btn-icon" onclick="openSettings()" title="Einstellungen">&#9881;</button>
   </div>
 </header>
@@ -262,6 +264,47 @@
 <!-- ================================================================
      SETTINGS MODAL
 ================================================================ -->
+<!-- ================================================================
+     UPDATE MODAL
+================================================================ -->
+<div id="update-overlay" class="overlay hidden" onclick="closeUpdate(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Software-Update</h2>
+      <button class="btn-icon" onclick="closeUpdate()">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="update-info">
+        <div class="update-row">
+          <span class="update-label">Installierte Version</span>
+          <code id="upd-current">--</code>
+        </div>
+        <div class="update-row">
+          <span class="update-label">Verfügbare Version</span>
+          <code id="upd-latest">--</code>
+        </div>
+        <div class="update-row">
+          <span class="update-label">Status</span>
+          <span id="upd-status-text">Prüfe...</span>
+        </div>
+      </div>
+
+      <div id="upd-log-wrap" class="upd-log-wrap hidden">
+        <div class="card-label" style="margin-top:.8rem">Update-Log</div>
+        <pre id="upd-log" class="upd-log"></pre>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn" id="btn-do-update" onclick="applyUpdate()" disabled>
+          Update installieren
+        </button>
+        <button class="btn btn-secondary" onclick="checkUpdate()">&#8635; Erneut prüfen</button>
+        <span id="upd-spinner" class="hidden" style="color:var(--text3);font-size:.82rem">Läuft…</span>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="settings-overlay" class="overlay hidden" onclick="closeSettings(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-header">

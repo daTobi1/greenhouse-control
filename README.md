@@ -4,16 +4,42 @@ Raspberry Pi basierte Gewächshaus-Steuerung mit Web-Dashboard, automatischer L�
 
 ---
 
+## Schnellstart
+
+### Installation
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/daTobi1/greenhouse-control/master/install.sh | bash
+```
+
+Das Script erkennt automatisch ob es auf einem Raspberry Pi läuft, installiert alle Abhängigkeiten, richtet einen systemd-Service ein und startet das Dashboard.
+
+Dashboard aufrufen:
+```
+http://<Pi-IP-Adresse>:8080
+```
+
+### Deinstallation
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/daTobi1/greenhouse-control/master/uninstall.sh | bash
+```
+
+Fragt vor dem Löschen des Verzeichnisses (inkl. Datenbank und Timelapse-Aufnahmen) nochmals nach.
+
+---
+
 ## Features
 
 - **Web-Dashboard** – erreichbar im lokalen Netzwerk oder per VPN (Tailscale, WireGuard)
-- **Lüfterregelung** – proportionale Regelung via PWM/MOSFET, Abluft-Prinzip
+- **Lüfterregelung** – proportionale PWM-Regelung via MOSFET, Abluft-Prinzip
 - **SwitchBot Integration** – direkte Bluetooth-Verbindung, kein Cloud-API nötig
-- **Zwei Sensoren** – frei wählbar welcher Innen-/Außensensor ist
+- **Zwei Sensoren** – frei konfigurierbar welcher innen/außen ist
 - **Regelungsarten** – Temperatur, Feuchtigkeit oder kombiniert
-- **Timelapse** – USB-Kamera, konfigurierbares Intervall, automatische Kameraerkennung, ffmpeg-Kompilierung mit Download
-- **Verlaufsdiagramme** – Temperatur, Feuchtigkeit, Lüfterdrehzahl – jeweils mit unabhängiger Zeitbereichswahl
 - **Trend-Indikatoren** – zeigen ob Werte steigen, fallen oder stabil sind
+- **Verlaufsdiagramme** – Temperatur, Feuchtigkeit, Lüfterdrehzahl mit unabhängiger Zeitbereichswahl
+- **Timelapse** – USB-Kamera mit automatischer Erkennung, konfigurierbares Intervall (Stunden), ffmpeg-Kompilierung und Download
+- **Software-Update** – Update-Button im Dashboard prüft auf neue Versionen und installiert nach Bestätigung
 
 ---
 
@@ -22,59 +48,31 @@ Raspberry Pi basierte Gewächshaus-Steuerung mit Web-Dashboard, automatischer L�
 | Komponente | Beschreibung |
 |---|---|
 | Raspberry Pi | 3B+ / 4 / 5 (Raspberry Pi OS Bookworm/Bullseye) |
-| SwitchBot IP65 | Hygro-Thermometer (2x) – Bluetooth LE |
+| SwitchBot IP65 | Hygro-Thermometer (2×) – Bluetooth LE |
 | MOSFET | z.B. IRLZ44N – PWM-Ansteuerung des Lüfters |
-| Lüfter | 1x (12V oder 5V, je nach Schaltung) |
+| Lüfter | 1× (12 V oder 5 V je nach Schaltung) |
 | USB-Kamera | beliebige UVC-kompatible Webcam |
 
 ### Schaltung Lüfter (MOSFET)
 
 ```
-GPIO18 (BCM) ──[1kΩ]── Gate (MOSFET)
-GND          ──────── Source (MOSFET)
-                       Drain ── Lüfter (–)
-                       Lüfter (+) ── 12V
-                       12V GND ── Pi GND
+GPIO18 (BCM) ──[1 kΩ]── Gate (MOSFET)
+GND          ─────────── Source
+                          Drain ── Lüfter (–)
+                          Lüfter (+) ── 12 V
+                          12 V GND ── Pi GND
 ```
 
-GPIO-Pin ist im Dashboard konfigurierbar.
+GPIO-Pin ist im Dashboard konfigurierbar (Standard: GPIO18).
 
 ---
 
-## Installation
+## Manuelle Installation / Entwicklung
 
 ```bash
-# 1. Repo klonen
 git clone https://github.com/daTobi1/greenhouse-control.git
 cd greenhouse-control
 
-# 2. Installationsscript ausführen
-bash install.sh
-```
-
-Das Script installiert alle Abhängigkeiten, richtet den systemd-Service ein und startet ihn automatisch beim Booten.
-
-```bash
-# Service manuell starten
-sudo systemctl start greenhouse
-
-# Status prüfen
-sudo systemctl status greenhouse
-
-# Logs verfolgen
-sudo journalctl -u greenhouse -f
-```
-
-Dashboard aufrufen:
-```
-http://<Pi-IP-Adresse>:8080
-```
-
----
-
-## Manueller Start (Entwicklung)
-
-```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -82,7 +80,7 @@ pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 8080 --reload
 ```
 
-Auf Windows/Mac läuft die App automatisch im **Mock-Mode** – GPIO und Kamera werden simuliert, alle API-Endpunkte sind voll funktionsfähig.
+Auf Windows/Mac läuft die App im **Mock-Mode** – GPIO und Kamera werden simuliert, alle API-Endpunkte sind voll funktionsfähig.
 
 ---
 
@@ -93,8 +91,9 @@ greenhouse-control/
 ├── main.py                  # FastAPI App + Lifespan
 ├── state.py                 # Globale Service-Instanzen
 ├── requirements.txt
-├── install.sh               # Automatisches Setup für Raspberry Pi
-├── greenhouse.service       # systemd Unit-File
+├── install.sh               # Installations-Script (curl-kompatibel)
+├── uninstall.sh             # Deinstallations-Script
+├── greenhouse.service       # systemd Unit-File (Referenz)
 │
 ├── db/
 │   └── database.py          # SQLite (Sensordaten, Einstellungen, Lüfter-Events)
@@ -109,7 +108,8 @@ greenhouse-control/
 │   ├── sensors.py           # GET /current, /history, POST /discover
 │   ├── fans.py              # GET /status, POST /manual, /auto
 │   ├── timelapse.py         # start/stop/compile/preview/cameras/sessions
-│   └── settings.py          # GET/PUT alle Einstellungen
+│   ├── settings.py          # GET/PUT alle Einstellungen
+│   └── update.py            # GET /check, POST /apply, GET /status
 │
 └── static/
     ├── index.html           # Single-Page Dashboard
@@ -127,33 +127,36 @@ greenhouse-control/
 | GET | `/api/sensors/history?hours=24` | Verlaufsdaten |
 | POST | `/api/sensors/discover` | SwitchBot-Geräte in der Nähe suchen |
 | GET | `/api/fans/status` | Lüfter-Status und Drehzahl |
-| POST | `/api/fans/manual` | Manuelle Drehzahl setzen `{"speed": 0.75}` |
+| POST | `/api/fans/manual` | Manuelle Drehzahl `{"speed": 0.75}` |
 | POST | `/api/fans/auto` | Zurück in Automatik |
 | GET | `/api/settings` | Alle Einstellungen lesen |
 | PUT | `/api/settings` | Einstellungen aktualisieren |
 | GET | `/api/timelapse/cameras` | Verfügbare Kameras erkennen |
 | POST | `/api/timelapse/start` | Timelapse-Session starten |
 | POST | `/api/timelapse/stop` | Session stoppen |
-| POST | `/api/timelapse/compile/{session}` | Video aus Frames kompilieren |
+| POST | `/api/timelapse/compile/{session}` | Video kompilieren |
 | GET | `/api/timelapse/preview` | Live-Vorschau (JPEG) |
+| GET | `/api/update/check` | Auf neue Version prüfen |
+| POST | `/api/update/apply` | Update installieren (Hintergrund) |
+| GET | `/api/update/status` | Status eines laufenden Updates |
 
-Interaktive API-Dokumentation: `http://<Pi-IP>:8080/docs`
+Interaktive Dokumentation: `http://<Pi-IP>:8080/docs`
 
 ---
 
 ## Einstellungen
 
-Alle Einstellungen werden im Dashboard unter dem Zahnrad-Symbol konfiguriert und in der SQLite-Datenbank gespeichert.
+Alle Einstellungen über das Zahnrad-Symbol im Dashboard.
 
 | Einstellung | Standard | Beschreibung |
 |---|---|---|
-| `inside_sensor_mac` | – | MAC-Adresse des Innen-Sensors |
-| `outside_sensor_mac` | – | MAC-Adresse des Außen-Sensors |
+| `inside_sensor_mac` | – | MAC-Adresse Innen-Sensor |
+| `outside_sensor_mac` | – | MAC-Adresse Außen-Sensor |
 | `target_temperature` | 25.0 °C | Ziel-Temperatur |
 | `target_humidity` | 65 % | Ziel-Feuchtigkeit |
 | `control_mode` | combined | `temperature` / `humidity` / `combined` |
-| `fan_gpio_pin` | 18 | GPIO-Pin (BCM) für PWM |
-| `fan_min_speed` | 0.2 | Mindest-Drehzahl wenn Lüfter läuft (0–1) |
+| `fan_gpio_pin` | 18 | GPIO-Pin (BCM) |
+| `fan_min_speed` | 0.2 | Mindest-Drehzahl (0–1) |
 | `fan_max_speed` | 1.0 | Maximale Drehzahl (0–1) |
 | `temp_control_range` | 5.0 °C | Temperaturdifferenz für volle Drehzahl |
 | `humidity_control_range` | 20 % | Feuchtigkeitsdifferenz für volle Drehzahl |
@@ -167,21 +170,44 @@ Alle Einstellungen werden im Dashboard unter dem Zahnrad-Symbol konfiguriert und
 
 1. Dashboard öffnen → Zahnrad-Symbol
 2. **"Sensoren suchen"** klicken (10-Sekunden BLE-Scan)
-3. Gefundene Geräte erscheinen mit MAC-Adresse und Signalstärke
-4. Per **"Innen"** / **"Außen"** Button die Sensoren zuweisen
-5. Speichern – Daten erscheinen nach dem nächsten BLE-Scan (max. 30s)
+3. Gefundene Geräte mit MAC-Adresse und Signalstärke werden angezeigt
+4. Per **"Innen"** / **"Außen"** die Sensoren zuweisen
+5. Speichern – Daten erscheinen nach dem nächsten BLE-Scan (max. 30 s)
 
 ---
 
 ## Regelungslogik
 
-Der Lüfter arbeitet im **Abluft-Prinzip** (schiebt Luft aus dem Gewächshaus):
+Der Lüfter arbeitet im **Abluft-Prinzip** (schiebt Luft aus dem Gewächshaus heraus):
 
-- Lüfter läuft **nur**, wenn die Außenluft die Innenluft verbessern würde
+- Lüfter läuft **nur**, wenn die Außenluft die Innenluft tatsächlich verbessern würde
   - Temperatur: Außen kühler als innen **und** innen über Zieltemperatur
   - Feuchtigkeit: Außen trockener als innen **und** innen über Ziel-Feuchtigkeit
 - Drehzahl skaliert proportional zwischen `fan_min` und `fan_max`
 - Unter Mindest-Drehzahl wird der Lüfter komplett ausgeschaltet
+
+---
+
+## Software-Update
+
+Im Dashboard erscheint oben rechts ein **Update-Button** (↑) sobald eine neue Version verfügbar ist. Ein Klick zeigt die aktuell installierte und verfügbare Version. Nach Bestätigung wird automatisch:
+
+1. `git pull` ausgeführt
+2. Python-Abhängigkeiten aktualisiert
+3. Der systemd-Service neu gestartet
+4. Das Dashboard neu geladen
+
+---
+
+## Service-Befehle
+
+```bash
+sudo systemctl start   greenhouse   # Starten
+sudo systemctl stop    greenhouse   # Stoppen
+sudo systemctl restart greenhouse   # Neu starten
+sudo systemctl status  greenhouse   # Status
+sudo journalctl -u greenhouse -f    # Logs verfolgen
+```
 
 ---
 

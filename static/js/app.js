@@ -572,6 +572,96 @@ async function refreshPreview() {
 // ----------------------------------------------------------------
 // Settings modal
 // ----------------------------------------------------------------
+// ----------------------------------------------------------------
+// Update
+// ----------------------------------------------------------------
+let _updateAvailable = false;
+
+async function checkUpdate() {
+  document.getElementById('upd-status-text').textContent = 'Prüfe…';
+  document.getElementById('upd-current').textContent = '…';
+  document.getElementById('upd-latest').textContent  = '…';
+  document.getElementById('btn-do-update').disabled   = true;
+
+  try {
+    const r = await fetch(`${API}/api/update/check`);
+    const d = await r.json();
+
+    if (d.error) {
+      document.getElementById('upd-status-text').textContent = `Fehler: ${d.error}`;
+      return;
+    }
+
+    document.getElementById('upd-current').textContent = d.current ?? '--';
+    document.getElementById('upd-latest').textContent  = d.latest  ?? '--';
+
+    if (d.update_available) {
+      document.getElementById('upd-status-text').textContent = 'Update verfügbar';
+      document.getElementById('btn-do-update').disabled = false;
+      _updateAvailable = true;
+      document.getElementById('btn-update').style.display = '';
+      document.getElementById('update-badge').classList.remove('hidden');
+    } else if (d.up_to_date) {
+      document.getElementById('upd-status-text').textContent = 'Aktuell – kein Update nötig';
+      _updateAvailable = false;
+      document.getElementById('update-badge').classList.add('hidden');
+    } else {
+      document.getElementById('upd-status-text').textContent = 'Unbekannt';
+    }
+  } catch(e) {
+    document.getElementById('upd-status-text').textContent = 'Verbindungsfehler';
+  }
+}
+
+async function applyUpdate() {
+  if (!confirm('Update jetzt installieren?\nDie Anwendung wird danach automatisch neu gestartet.')) return;
+
+  document.getElementById('btn-do-update').disabled = true;
+  document.getElementById('upd-spinner').classList.remove('hidden');
+  document.getElementById('upd-log-wrap').classList.remove('hidden');
+  document.getElementById('upd-log').textContent = 'Starte Update…\n';
+  document.getElementById('upd-status-text').textContent = 'Installiere…';
+
+  await fetch(`${API}/api/update/apply`, { method: 'POST' });
+  pollUpdateStatus();
+}
+
+async function pollUpdateStatus() {
+  try {
+    const r = await fetch(`${API}/api/update/status`);
+    const d = await r.json();
+
+    document.getElementById('upd-log').textContent = d.log || '';
+    document.getElementById('upd-log').scrollTop = 9999;
+
+    if (d.status === 'running') {
+      setTimeout(pollUpdateStatus, 1500);
+    } else if (d.status === 'done') {
+      document.getElementById('upd-status-text').textContent = 'Update abgeschlossen – Seite wird neu geladen…';
+      document.getElementById('upd-spinner').classList.add('hidden');
+      document.getElementById('update-badge').classList.add('hidden');
+      setTimeout(() => location.reload(), 4000);
+    } else {
+      document.getElementById('upd-status-text').textContent = 'Fehler beim Update';
+      document.getElementById('upd-spinner').classList.add('hidden');
+    }
+  } catch(e) {
+    // Server restarted – reload page
+    document.getElementById('upd-status-text').textContent = 'Server startet neu…';
+    setTimeout(() => location.reload(), 5000);
+  }
+}
+
+function openUpdate() {
+  document.getElementById('update-overlay').classList.remove('hidden');
+  checkUpdate();
+}
+
+function closeUpdate(evt) {
+  if (evt && evt.target !== document.getElementById('update-overlay')) return;
+  document.getElementById('update-overlay').classList.add('hidden');
+}
+
 function openSettings() {
   loadSettingsModal();
   document.getElementById('settings-overlay').classList.remove('hidden');
@@ -675,6 +765,9 @@ async function init() {
   setInterval(loadHistory, 120_000);
   // Reload sessions every 30 seconds
   setInterval(loadSessions, 30_000);
+  // Check for updates on load and every 10 minutes
+  checkUpdate();
+  setInterval(checkUpdate, 600_000);
 }
 
 document.addEventListener('DOMContentLoaded', init);

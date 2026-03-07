@@ -538,6 +538,65 @@ select {
 .discover-item .mac-addr { font-family: monospace; color: var(--accent2); flex: 1; }
 
 /* ============================================================
+   Update badge & modal
+============================================================ */
+.update-badge {
+  font-size: .7rem;
+  font-weight: 600;
+  padding: .15rem .45rem;
+  border-radius: 10px;
+  background: var(--warn);
+  color: #000;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .5; }
+}
+
+.update-info {
+  background: var(--bg3);
+  border-radius: 6px;
+  padding: .7rem .9rem;
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+}
+
+.update-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: .85rem;
+}
+
+.update-label { color: var(--text2); }
+
+.update-row code {
+  font-family: monospace;
+  color: var(--accent2);
+  background: var(--bg2);
+  padding: .1rem .4rem;
+  border-radius: 4px;
+}
+
+.upd-log-wrap { margin-top: .5rem; }
+
+.upd-log {
+  background: #000;
+  color: #b1bac4;
+  font-size: .75rem;
+  padding: .6rem .8rem;
+  border-radius: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin-top: .3rem;
+}
+
+/* ============================================================
    Toast
 ============================================================ */
 .toast {
