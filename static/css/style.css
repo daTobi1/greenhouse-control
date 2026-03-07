@@ -396,6 +396,16 @@ select {
   color: var(--text3);
 }
 
+.cam-select-wrap {
+  display: flex;
+  gap: .3rem;
+  align-items: center;
+}
+.cam-select-wrap select {
+  flex: 1;
+  min-width: 100px;
+}
+
 .session-list {
   display: flex;
   flex-direction: column;

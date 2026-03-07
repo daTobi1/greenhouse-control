@@ -227,8 +227,13 @@
         <input type="number" id="tl-fps" min="1" max="60" value="25" />
       </div>
       <div class="control-row">
-        <label>Kamera-Index</label>
-        <input type="number" id="tl-cam-idx" min="0" max="10" value="0" />
+        <label>Kamera</label>
+        <div class="cam-select-wrap">
+          <select id="tl-cam-idx">
+            <option value="0">Kamera 0</option>
+          </select>
+          <button class="btn-small" onclick="loadCameras()" title="Kameras suchen">&#8635;</button>
+        </div>
       </div>
 
       <div class="btn-row">

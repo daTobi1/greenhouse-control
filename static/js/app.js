@@ -392,6 +392,31 @@ async function loadHistory() {
 // ----------------------------------------------------------------
 // Timelapse
 // ----------------------------------------------------------------
+async function loadCameras() {
+  const select = document.getElementById('tl-cam-idx');
+  const prev   = select.value;
+  select.innerHTML = '<option value="">Suche…</option>';
+  select.disabled  = true;
+
+  try {
+    const r = await fetch(`${API}/api/timelapse/cameras`);
+    const d = await r.json();
+    const cameras = d.cameras || [];
+
+    if (!cameras.length) {
+      select.innerHTML = '<option value="0">Keine Kamera gefunden</option>';
+    } else {
+      select.innerHTML = cameras
+        .map(c => `<option value="${c.index}">${c.name} (Index ${c.index})</option>`)
+        .join('');
+      if (cameras.some(c => String(c.index) === prev)) select.value = prev;
+    }
+  } catch(e) {
+    select.innerHTML = '<option value="0">Kamera 0</option>';
+  }
+  select.disabled = false;
+}
+
 async function fetchTimelapse() {
   try {
     const r = await fetch(`${API}/api/timelapse/status`);
@@ -417,8 +442,10 @@ async function fetchTimelapse() {
 
     // Update timelapse form from settings (interval stored in seconds, displayed in hours)
     document.getElementById('tl-interval').value = parseFloat(((d.interval ?? 3600) / 3600).toFixed(2));
-    document.getElementById('tl-fps').value      = d.fps      ?? 25;
-    document.getElementById('tl-cam-idx').value  = d.camera_index ?? 0;
+    document.getElementById('tl-fps').value = d.fps ?? 25;
+    // Sync dropdown selection without triggering a re-scan
+    const camSel = document.getElementById('tl-cam-idx');
+    camSel.value = String(d.camera_index ?? 0);
 
     // Camera dot
     setDot('dot-cam', d.camera_available ? 'ok' : 'warn');
@@ -636,6 +663,7 @@ async function init() {
   initGauge();
   initCharts();
   await loadControlSettings();
+  await loadCameras();
   await loadSessions();
   await pollAll();
   await loadHistory();

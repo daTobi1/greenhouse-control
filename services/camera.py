@@ -189,6 +189,20 @@ class CameraService:
             )
         return sorted(sessions, key=lambda x: x["name"], reverse=True)
 
+    def detect_cameras(self) -> list[dict]:
+        """Scan video device indices 0-9 and return those that can deliver a frame."""
+        if not CV2_AVAILABLE:
+            return []
+        cameras = []
+        for i in range(10):
+            cap = cv2.VideoCapture(i)
+            if cap.isOpened():
+                ret, _ = cap.read()
+                cap.release()
+                if ret:
+                    cameras.append({"index": i, "name": f"Kamera {i}"})
+        return cameras
+
     def delete_session(self, session: str) -> bool:
         session_dir = self._frames_dir / session
         output_file = self._output_dir / f"{session}.mp4"

@@ -89,6 +89,13 @@ async def delete_session(session: str):
     return {"deleted": session}
 
 
+@router.get("/cameras")
+async def detect_cameras():
+    """Scan for available camera devices (non-blocking thread)."""
+    cameras = await asyncio.to_thread(state.camera_service.detect_cameras)
+    return {"cameras": cameras}
+
+
 @router.get("/preview")
 async def camera_preview():
     """Return a live JPEG preview from the camera."""
