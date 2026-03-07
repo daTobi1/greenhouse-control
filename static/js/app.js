@@ -576,6 +576,14 @@ async function refreshPreview() {
 // Update
 // ----------------------------------------------------------------
 let _updateAvailable = false;
+let _updateTimer = null;
+
+function scheduleUpdateCheck(days) {
+  if (_updateTimer) clearInterval(_updateTimer);
+  if (days > 0) {
+    _updateTimer = setInterval(checkUpdate, days * 86_400_000);
+  }
+}
 
 async function checkUpdate() {
   document.getElementById('upd-status-text').textContent = 'Prüfe…';
@@ -678,8 +686,9 @@ async function loadSettingsModal() {
     document.getElementById('inside-mac').value  = s.inside_sensor_mac  || '';
     document.getElementById('outside-mac').value = s.outside_sensor_mac || '';
     document.getElementById('fan-gpio').value    = s.fan_gpio_pin        ?? 18;
-    document.getElementById('ble-interval').value = s.ble_scan_interval  ?? 30;
-    document.getElementById('ble-duration').value = s.ble_scan_duration  ?? 10;
+    document.getElementById('ble-interval').value       = s.ble_scan_interval         ?? 30;
+    document.getElementById('ble-duration').value       = s.ble_scan_duration         ?? 10;
+    document.getElementById('update-interval-days').value = s.update_check_interval_days ?? 7;
   } catch(e) {}
 }
 
@@ -687,15 +696,17 @@ async function saveSettings() {
   const body = {
     inside_sensor_mac:  document.getElementById('inside-mac').value.trim().toUpperCase(),
     outside_sensor_mac: document.getElementById('outside-mac').value.trim().toUpperCase(),
-    fan_gpio_pin:        parseInt(document.getElementById('fan-gpio').value),
-    ble_scan_interval:   parseInt(document.getElementById('ble-interval').value),
-    ble_scan_duration:   parseInt(document.getElementById('ble-duration').value),
+    fan_gpio_pin:               parseInt(document.getElementById('fan-gpio').value),
+    ble_scan_interval:          parseInt(document.getElementById('ble-interval').value),
+    ble_scan_duration:          parseInt(document.getElementById('ble-duration').value),
+    update_check_interval_days: Math.max(0, parseInt(document.getElementById('update-interval-days').value) || 0),
   };
   await fetch(`${API}/api/settings`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
   });
+  scheduleUpdateCheck(body.update_check_interval_days);
   const msg = document.getElementById('settings-saved');
   msg.classList.remove('hidden');
   setTimeout(() => msg.classList.add('hidden'), 2500);
@@ -764,7 +775,12 @@ async function init() {
   setInterval(loadHistory, 120_000);
   // Reload sessions every 30 seconds
   setInterval(loadSessions, 30_000);
-  // Update check only on manual button click
+  // Schedule automatic update check based on saved interval
+  try {
+    const r = await fetch(`${API}/api/settings`);
+    const s = await r.json();
+    scheduleUpdateCheck(s.update_check_interval_days ?? 7);
+  } catch(e) {}
 }
 
 document.addEventListener('DOMContentLoaded', init);
