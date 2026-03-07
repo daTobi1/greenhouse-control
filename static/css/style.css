@@ -597,6 +597,27 @@ select {
 }
 
 /* ============================================================
+   Tooltip
+============================================================ */
+.tooltip {
+  position: fixed;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text2);
+  font-size: .75rem;
+  line-height: 1.45;
+  padding: .4rem .65rem;
+  border-radius: 6px;
+  max-width: 260px;
+  z-index: 500;
+  box-shadow: var(--shadow);
+  pointer-events: none;
+  white-space: normal;
+  transition: opacity .15s;
+}
+.tooltip.hidden { display: none; }
+
+/* ============================================================
    Toast
 ============================================================ */
 .toast {

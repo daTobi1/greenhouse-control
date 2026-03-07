@@ -116,7 +116,7 @@
     <div class="card control-card">
       <div class="card-label">Regelung</div>
 
-      <div class="control-row">
+      <div class="control-row" data-tooltip="Zieltemperatur im Gewächshaus. Der Lüfter läuft, wenn die Innentemperatur diesen Wert überschreitet und es draußen kühler ist.">
         <label>Ziel-Temperatur</label>
         <div class="input-group">
           <input type="number" id="target-temp" min="-10" max="50" step="0.5" />
@@ -124,7 +124,7 @@
         </div>
       </div>
 
-      <div class="control-row">
+      <div class="control-row" data-tooltip="Ziel-Luftfeuchtigkeit im Gewächshaus. Der Lüfter läuft, wenn die Innenfeuchtigkeit diesen Wert überschreitet und es draußen trockener ist.">
         <label>Ziel-Feuchtigkeit</label>
         <div class="input-group">
           <input type="number" id="target-hum" min="0" max="100" step="1" />
@@ -132,7 +132,7 @@
         </div>
       </div>
 
-      <div class="control-row">
+      <div class="control-row" data-tooltip="Regelungsmodus: &#39;oder&#39; = Lüfter läuft wenn eine Bedingung erfüllt ist. &#39;und&#39; = beide Bedingungen müssen gleichzeitig erfüllt sein.">
         <label>Modus</label>
         <select id="control-mode">
           <option value="combined_or">Kühlen oder Entfeuchten</option>
@@ -142,7 +142,7 @@
         </select>
       </div>
 
-      <div class="control-row">
+      <div class="control-row" data-tooltip="Temperaturdifferenz zur Zieltemperatur, bei der der Lüfter die maximale Drehzahl erreicht. Kleiner Wert = empfindlichere Regelung.">
         <label>Temp.-Regelbereich</label>
         <div class="input-group">
           <input type="number" id="temp-range" min="1" max="20" step="0.5" />
@@ -150,7 +150,7 @@
         </div>
       </div>
 
-      <div class="control-row">
+      <div class="control-row" data-tooltip="Feuchtigkeitsdifferenz zum Zielwert, bei der der Lüfter die maximale Drehzahl erreicht. Kleiner Wert = empfindlichere Regelung.">
         <label>Feuchte-Regelbereich</label>
         <div class="input-group">
           <input type="number" id="hum-range" min="1" max="50" step="1" />
@@ -158,7 +158,7 @@
         </div>
       </div>
 
-      <div class="control-row">
+      <div class="control-row" data-tooltip="Mindest- und Maximaldrehzahl des Lüfters (0 = aus, 1 = 100 %). Unterhalb des Minimums wird der Lüfter komplett abgeschaltet.">
         <label>Lüfter min / max</label>
         <div class="input-group compact">
           <input type="number" id="fan-min" min="0" max="1" step="0.05" placeholder="min" />
@@ -221,15 +221,15 @@
         <span id="tl-frame-count" class="tl-frames"></span>
       </div>
 
-      <div class="control-row">
+      <div class="control-row" data-tooltip="Zeitabstand zwischen zwei Timelapse-Aufnahmen in Stunden. Z. B. 0.5 = alle 30 Minuten ein Bild.">
         <label>Intervall (Stunden)</label>
         <input type="number" id="tl-interval" min="0.1" max="24" step="0.1" value="1" />
       </div>
-      <div class="control-row">
+      <div class="control-row" data-tooltip="Bildrate des kompilierten Timelapse-Videos in Frames pro Sekunde. Höhere Werte = schnelleres Video.">
         <label>Bildrate (FPS)</label>
         <input type="number" id="tl-fps" min="1" max="60" value="25" />
       </div>
-      <div class="control-row">
+      <div class="control-row" data-tooltip="Kamera für die Timelapse-Aufnahmen auswählen. Mit dem Pfeil-Button werden angeschlossene Kameras neu gesucht.">
         <label>Kamera</label>
         <div class="cam-select-wrap">
           <select id="tl-cam-idx">
@@ -317,11 +317,11 @@
       <h3>SwitchBot Sensoren</h3>
       <p class="hint">MAC-Adressen der Sensoren (Format: AA:BB:CC:DD:EE:FF)</p>
 
-      <div class="control-row">
+      <div class="control-row" data-tooltip="Bluetooth-MAC-Adresse des SwitchBot-Sensors im Inneren des Gewächshauses. Über 'Sensoren suchen' automatisch ermitteln.">
         <label>Innen-Sensor MAC</label>
         <input type="text" id="inside-mac" placeholder="AA:BB:CC:DD:EE:FF" class="mac-input" />
       </div>
-      <div class="control-row">
+      <div class="control-row" data-tooltip="Bluetooth-MAC-Adresse des SwitchBot-Sensors außerhalb des Gewächshauses. Über 'Sensoren suchen' automatisch ermitteln.">
         <label>Außen-Sensor MAC</label>
         <input type="text" id="outside-mac" placeholder="AA:BB:CC:DD:EE:FF" class="mac-input" />
       </div>
@@ -332,21 +332,21 @@
       <div id="discover-result" class="discover-result"></div>
 
       <h3>GPIO / Hardware</h3>
-      <div class="control-row">
+      <div class="control-row" data-tooltip="BCM-Nummer des GPIO-Pins am Raspberry Pi, an dem der Lüfter über den MOSFET angeschlossen ist. Standard: GPIO 18.">
         <label>Lüfter GPIO-Pin (BCM)</label>
         <input type="number" id="fan-gpio" min="1" max="27" value="18" />
       </div>
-      <div class="control-row">
+      <div class="control-row" data-tooltip="Pause zwischen zwei Bluetooth-Scans in Sekunden. Kürzeres Intervall = aktuellere Sensordaten, aber höherer CPU-Verbrauch.">
         <label>BLE Scan-Intervall (s)</label>
         <input type="number" id="ble-interval" min="10" max="300" value="30" />
       </div>
-      <div class="control-row">
+      <div class="control-row" data-tooltip="Dauer eines einzelnen Bluetooth-Scans in Sekunden. Längere Dauer erhöht die Chance, Sensoren zu empfangen.">
         <label>BLE Scan-Dauer (s)</label>
         <input type="number" id="ble-duration" min="5" max="30" value="10" />
       </div>
 
       <h3>Updates</h3>
-      <div class="control-row">
+      <div class="control-row" data-tooltip="Automatische Prüfung auf neue Software-Versionen alle N Tage. 0 = automatische Prüfung deaktiviert, nur manuell per Button.">
         <label>Automatisch prüfen (Tage, 0 = aus)</label>
         <input type="number" id="update-interval-days" min="0" max="365" step="1" value="7" />
       </div>

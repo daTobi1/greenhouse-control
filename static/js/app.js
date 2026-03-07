@@ -7,6 +7,41 @@ let charts = {};
 let pollTimer = null;
 let manualOpen = false;
 
+// ----------------------------------------------------------------
+// Tooltip system
+// ----------------------------------------------------------------
+(function () {
+  const tip = document.createElement('div');
+  tip.className = 'tooltip hidden';
+  document.body.appendChild(tip);
+
+  function show(e) {
+    const el = e.target.closest('[data-tooltip]');
+    if (!el) return;
+    tip.textContent = el.dataset.tooltip;
+    tip.classList.remove('hidden');
+    move(e);
+  }
+
+  function move(e) {
+    if (tip.classList.contains('hidden')) return;
+    const x = e.clientX + 14;
+    const y = e.clientY - tip.offsetHeight - 8;
+    tip.style.left = Math.min(x, window.innerWidth  - tip.offsetWidth  - 10) + 'px';
+    tip.style.top  = Math.max(y, 8) + 'px';
+  }
+
+  function hide(e) {
+    const el = e.target.closest('[data-tooltip]');
+    if (el && el.contains(e.relatedTarget)) return;
+    tip.classList.add('hidden');
+  }
+
+  document.addEventListener('mouseover',  show);
+  document.addEventListener('mousemove',  move);
+  document.addEventListener('mouseout',   hide);
+})();
+
 // Ring buffer (max 10 readings) per metric key for trend computation
 const trendHistory = {};
 
