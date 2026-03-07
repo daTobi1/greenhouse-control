@@ -173,7 +173,7 @@
   <section class="charts-grid">
     <div class="card chart-card">
       <div class="card-label">Temperaturverlauf
-        <select class="chart-range" id="chart-hours" onchange="loadHistory()">
+        <select class="chart-range" id="chart-hours-temp" onchange="loadHistory()">
           <option value="6">6 Std.</option>
           <option value="24" selected>24 Std.</option>
           <option value="48">48 Std.</option>
@@ -183,11 +183,25 @@
       <canvas id="chart-temp"></canvas>
     </div>
     <div class="card chart-card">
-      <div class="card-label">Feuchtigkeitsverlauf</div>
+      <div class="card-label">Feuchtigkeitsverlauf
+        <select class="chart-range" id="chart-hours-hum" onchange="loadHistory()">
+          <option value="6">6 Std.</option>
+          <option value="24" selected>24 Std.</option>
+          <option value="48">48 Std.</option>
+          <option value="168">7 Tage</option>
+        </select>
+      </div>
       <canvas id="chart-hum"></canvas>
     </div>
     <div class="card chart-card">
-      <div class="card-label">Lüftergeschwindigkeit</div>
+      <div class="card-label">Lüftergeschwindigkeit
+        <select class="chart-range" id="chart-hours-fan" onchange="loadHistory()">
+          <option value="6">6 Std.</option>
+          <option value="24" selected>24 Std.</option>
+          <option value="48">48 Std.</option>
+          <option value="168">7 Tage</option>
+        </select>
+      </div>
       <canvas id="chart-fan"></canvas>
     </div>
   </section>
@@ -205,8 +219,8 @@
       </div>
 
       <div class="control-row">
-        <label>Intervall (Sekunden)</label>
-        <input type="number" id="tl-interval" min="5" max="86400" step="5" value="300" />
+        <label>Intervall (Stunden)</label>
+        <input type="number" id="tl-interval" min="0.1" max="24" step="0.1" value="1" />
       </div>
       <div class="control-row">
         <label>Bildrate (FPS)</label>
