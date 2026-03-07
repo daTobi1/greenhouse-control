@@ -1,5 +1,4 @@
 import logging
-import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -25,11 +24,18 @@ async def lifespan(app: FastAPI):
     # Database
     await state.db.init()
 
-    # Camera directories
-    state.camera_service.setup()
+    # Read all settings once
+    settings = await state.db.get_all_settings()
+
+    # Camera directories (use configured path)
+    tl_path = settings.get("timelapse_path", "timelapse")
+    state.camera_service.setup(
+        frames_dir=f"{tl_path}/frames",
+        output_dir=f"{tl_path}/output",
+        camera_index=int(settings.get("camera_index", 0)),
+    )
 
     # Fan: read GPIO pin from DB and initialise
-    settings = await state.db.get_all_settings()
     gpio_pin = int(settings.get("fan_gpio_pin", 18))
     state.fan_controller.setup(gpio_pin)
     state.fan_controller._configured_pin = gpio_pin
@@ -67,10 +73,6 @@ app.include_router(fans.router,         prefix="/api/fans",      tags=["fans"])
 app.include_router(timelapse.router,    prefix="/api/timelapse", tags=["timelapse"])
 app.include_router(settings_api.router, prefix="/api/settings",  tags=["settings"])
 app.include_router(update.router,       prefix="/api/update",    tags=["update"])
-
-# Timelapse videos
-os.makedirs("timelapse/output", exist_ok=True)
-app.mount("/timelapse", StaticFiles(directory="timelapse/output"), name="timelapse_videos")
 
 # Static dashboard (must be last)
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

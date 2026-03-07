@@ -345,6 +345,31 @@
         <input type="number" id="ble-duration" min="5" max="30" value="10" />
       </div>
 
+      <h3>Timelapse</h3>
+      <div class="control-row" data-tooltip="Ordner in dem Timelapse-Aufnahmen und Videos gespeichert werden. Relativer oder absoluter Pfad.">
+        <label>Speicherpfad</label>
+        <input type="text" id="timelapse-path" placeholder="timelapse" style="width:100%;max-width:220px" />
+      </div>
+      <div class="control-row" data-tooltip="Ermöglicht den Zugriff auf Timelapse-Videos über das lokale Netzwerk via Browser. URL wird unten angezeigt.">
+        <label>Netzwerkfreigabe</label>
+        <label style="display:flex;align-items:center;gap:.4rem;font-size:.85rem;color:var(--text2)">
+          <input type="checkbox" id="timelapse-share" onchange="updateShareUrl(this.checked)" />
+          Aktivieren
+        </label>
+      </div>
+      <div id="share-url-wrap" class="hidden hint" style="margin-bottom:.6rem">
+        Freigabe-URL: <a id="share-url" href="#" target="_blank" style="color:var(--accent)"></a>
+      </div>
+
+      <h3>Anzeige</h3>
+      <div class="control-row" data-tooltip="Wartezeit bevor ein Tooltip erscheint. 0 = sofort anzeigen.">
+        <label>Tooltip-Verzögerung</label>
+        <div class="input-group">
+          <input type="number" id="tooltip-delay" min="0" max="3000" step="100" value="600" />
+          <span class="unit">ms</span>
+        </div>
+      </div>
+
       <h3>Updates</h3>
       <div class="control-row" data-tooltip="Automatische Prüfung auf neue Software-Versionen alle N Tage. 0 = automatische Prüfung deaktiviert, nur manuell per Button.">
         <label>Automatisch prüfen (Tage, 0 = aus)</label>

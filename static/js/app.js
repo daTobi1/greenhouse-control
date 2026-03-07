@@ -15,15 +15,27 @@ let manualOpen = false;
   tip.className = 'tooltip hidden';
   document.body.appendChild(tip);
 
+  let _timer = null;
+  let _lastE = null;
+
+  function getDelay() {
+    return parseInt(localStorage.getItem('tooltip_delay_ms') ?? '600');
+  }
+
   function show(e) {
     const el = e.target.closest('[data-tooltip]');
-    if (!el) return;
-    tip.textContent = el.dataset.tooltip;
-    tip.classList.remove('hidden');
-    move(e);
+    clearTimeout(_timer);
+    if (!el) { tip.classList.add('hidden'); return; }
+    _lastE = e;
+    _timer = setTimeout(() => {
+      tip.textContent = el.dataset.tooltip;
+      tip.classList.remove('hidden');
+      if (_lastE) move(_lastE);
+    }, getDelay());
   }
 
   function move(e) {
+    _lastE = e;
     if (tip.classList.contains('hidden')) return;
     const x = e.clientX + 14;
     const y = e.clientY - tip.offsetHeight - 8;
@@ -32,6 +44,7 @@ let manualOpen = false;
   }
 
   function hide(e) {
+    clearTimeout(_timer);
     const el = e.target.closest('[data-tooltip]');
     if (el && el.contains(e.relatedTarget)) return;
     tip.classList.add('hidden');
@@ -725,7 +738,25 @@ async function loadSettingsModal() {
     document.getElementById('ble-interval').value       = s.ble_scan_interval         ?? 30;
     document.getElementById('ble-duration').value       = s.ble_scan_duration         ?? 10;
     document.getElementById('update-interval-days').value = s.update_check_interval_days ?? 7;
+    document.getElementById('timelapse-path').value  = s.timelapse_path ?? 'timelapse';
+    const shareOn = s.timelapse_share_enabled ?? false;
+    document.getElementById('timelapse-share').checked = shareOn;
+    updateShareUrl(shareOn);
+    document.getElementById('tooltip-delay').value = localStorage.getItem('tooltip_delay_ms') ?? '600';
   } catch(e) {}
+}
+
+function updateShareUrl(enabled) {
+  const wrap = document.getElementById('share-url-wrap');
+  if (enabled) {
+    wrap.classList.remove('hidden');
+    const url = window.location.origin + '/api/timelapse/browse';
+    const a   = document.getElementById('share-url');
+    a.href = url;
+    a.textContent = url;
+  } else {
+    wrap.classList.add('hidden');
+  }
 }
 
 async function saveSettings() {
@@ -736,7 +767,11 @@ async function saveSettings() {
     ble_scan_interval:          parseInt(document.getElementById('ble-interval').value),
     ble_scan_duration:          parseInt(document.getElementById('ble-duration').value),
     update_check_interval_days: Math.max(0, parseInt(document.getElementById('update-interval-days').value) || 0),
+    timelapse_path:         document.getElementById('timelapse-path').value.trim() || 'timelapse',
+    timelapse_share_enabled: document.getElementById('timelapse-share').checked,
   };
+  // Tooltip delay is client-side only
+  localStorage.setItem('tooltip_delay_ms', document.getElementById('tooltip-delay').value || '600');
   await fetch(`${API}/api/settings`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },

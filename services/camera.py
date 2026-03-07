@@ -183,7 +183,7 @@ class CameraService:
                     "name": d.name,
                     "frame_count": len(frames),
                     "has_video": output.exists(),
-                    "video_url": f"/timelapse/{d.name}.mp4" if output.exists() else None,
+                    "video_url": f"/api/timelapse/video/{d.name}" if output.exists() else None,
                     "active": d.name == self._session,
                 }
             )

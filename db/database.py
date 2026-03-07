@@ -27,6 +27,8 @@ DEFAULT_SETTINGS = {
     "fan_manual_override": False,
     "fan_manual_speed": 0.0,
     "update_check_interval_days": 7,  # 0 = deaktiviert
+    "timelapse_path": "timelapse",
+    "timelapse_share_enabled": False,
 }
 
 

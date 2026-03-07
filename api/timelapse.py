@@ -1,6 +1,8 @@
 import asyncio
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, BackgroundTasks
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel
 
 import state
@@ -94,6 +96,40 @@ async def detect_cameras():
     """Scan for available camera devices (non-blocking thread)."""
     cameras = await asyncio.to_thread(state.camera_service.detect_cameras)
     return {"cameras": cameras}
+
+
+@router.get("/video/{session}")
+async def get_video(session: str):
+    """Serve a compiled timelapse video for download."""
+    settings = await state.db.get_all_settings()
+    path = Path(settings.get("timelapse_path", "timelapse")) / "output" / f"{session}.mp4"
+    if not path.exists():
+        raise HTTPException(404, "Video not found")
+    return FileResponse(path, media_type="video/mp4", filename=f"{session}.mp4")
+
+
+@router.get("/browse", response_class=HTMLResponse)
+async def browse_timelapse():
+    """Simple HTTP file browser for the timelapse output folder (network share)."""
+    settings = await state.db.get_all_settings()
+    if not settings.get("timelapse_share_enabled", False):
+        raise HTTPException(403, "Network share is disabled")
+    output = Path(settings.get("timelapse_path", "timelapse")) / "output"
+    files = sorted(output.glob("*.mp4"), reverse=True) if output.exists() else []
+    items = "".join(
+        f'<li><a href="/api/timelapse/video/{f.stem}">{f.name}</a>'
+        f' &nbsp;<span style="color:#8b949e">({f.stat().st_size // 1024:,} KB)</span></li>'
+        for f in files
+    )
+    return f"""<!DOCTYPE html>
+<html lang="de"><head><meta charset="UTF-8">
+<title>Timelapse – Netzwerkfreigabe</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:640px;margin:2rem auto;
+background:#0d1117;color:#e6edf3;padding:1rem}}
+h1{{color:#79c0ff;margin-bottom:1rem}}a{{color:#58a6ff}}
+li{{margin:.5rem 0;font-size:.9rem}}</style></head>
+<body><h1>&#127909; Timelapse-Videos</h1>
+<ul>{items or "<li>Keine Videos vorhanden</li>"}</ul></body></html>"""
 
 
 @router.get("/preview")
