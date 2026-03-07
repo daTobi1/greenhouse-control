@@ -157,10 +157,19 @@ function setDot(id, state) {
 }
 
 // ----------------------------------------------------------------
-// Format helpers
+// Format helpers (German locale: comma as decimal separator)
 // ----------------------------------------------------------------
+function parseDE(val) {
+  return parseFloat(String(val).replace(',', '.'));
+}
+
+function formatDE(num, decimals = 1) {
+  if (num == null || isNaN(num)) return '';
+  return Number(num).toFixed(decimals).replace('.', ',');
+}
+
 function fmtVal(v, decimals = 1) {
-  return v == null ? '--' : Number(v).toFixed(decimals);
+  return v == null ? '--' : Number(v).toFixed(decimals).replace('.', ',');
 }
 
 function fmtAge(ts) {
@@ -294,26 +303,26 @@ async function loadControlSettings() {
     const r = await fetch(`${API}/api/settings`);
     const s = await r.json();
 
-    document.getElementById('target-temp').value   = s.target_temperature  ?? 25;
+    document.getElementById('target-temp').value   = formatDE(s.target_temperature  ?? 25, 1);
     document.getElementById('target-hum').value    = s.target_humidity     ?? 65;
     const mode = s.control_mode === 'combined' ? 'combined_or' : (s.control_mode ?? 'combined_or');
     document.getElementById('control-mode').value  = mode;
-    document.getElementById('temp-range').value    = s.temp_control_range   ?? 5;
+    document.getElementById('temp-range').value    = formatDE(s.temp_control_range   ?? 5,  1);
     document.getElementById('hum-range').value     = s.humidity_control_range ?? 20;
-    document.getElementById('fan-min').value       = s.fan_min_speed        ?? 0.2;
-    document.getElementById('fan-max').value       = s.fan_max_speed        ?? 1.0;
+    document.getElementById('fan-min').value       = formatDE(s.fan_min_speed        ?? 0.2, 2);
+    document.getElementById('fan-max').value       = formatDE(s.fan_max_speed        ?? 1.0, 2);
   } catch(e) {}
 }
 
 async function saveControlSettings() {
   const body = {
-    target_temperature:      parseFloat(document.getElementById('target-temp').value),
+    target_temperature:      parseDE(document.getElementById('target-temp').value),
     target_humidity:         parseFloat(document.getElementById('target-hum').value),
     control_mode:            document.getElementById('control-mode').value,
-    temp_control_range:      parseFloat(document.getElementById('temp-range').value),
+    temp_control_range:      parseDE(document.getElementById('temp-range').value),
     humidity_control_range:  parseFloat(document.getElementById('hum-range').value),
-    fan_min_speed:           parseFloat(document.getElementById('fan-min').value),
-    fan_max_speed:           parseFloat(document.getElementById('fan-max').value),
+    fan_min_speed:           parseDE(document.getElementById('fan-min').value),
+    fan_max_speed:           parseDE(document.getElementById('fan-max').value),
   };
   await fetch(`${API}/api/settings`, {
     method: 'PUT',
@@ -332,16 +341,29 @@ const CHART_DEFAULTS = {
     responsive: true,
     maintainAspectRatio: false,
     animation: false,
-    plugins: { legend: { labels: { color: '#8b949e', boxWidth: 12 } } },
+    plugins: {
+      legend: { labels: { color: '#8b949e', boxWidth: 12 } },
+      tooltip: {
+        callbacks: {
+          label: ctx => {
+            const v = ctx.parsed.y;
+            return ctx.dataset.label + ': ' + (v == null ? '--' : String(v % 1 === 0 ? v : v.toFixed(1)).replace('.', ','));
+          }
+        }
+      }
+    },
     scales: {
       x: {
         ticks: { color: '#8b949e', maxTicksLimit: 8, maxRotation: 0 },
         grid:  { color: '#21262d' },
       },
       y: {
-        ticks: { color: '#8b949e' },
+        ticks: {
+          color: '#8b949e',
+          callback: val => String(val % 1 === 0 ? val : val.toFixed(1)).replace('.', ','),
+        },
         grid:  { color: '#21262d' },
-        grace: '5%',   // auto-adds 5% padding above/below data range
+        grace: '5%',
       }
     }
   }
@@ -548,7 +570,7 @@ async function fetchTimelapse() {
     }
 
     // Update timelapse form from settings (interval stored in seconds, displayed in hours)
-    document.getElementById('tl-interval').value = parseFloat(((d.interval ?? 3600) / 3600).toFixed(2));
+    document.getElementById('tl-interval').value = formatDE((d.interval ?? 3600) / 3600, 2);
     document.getElementById('tl-capture-mode').value = d.capture_mode ?? 'still';
     document.getElementById('tl-clip-duration').value = d.clip_duration ?? 5;
     document.getElementById('tl-clip-fps').value = d.clip_fps ?? 10;
@@ -590,7 +612,7 @@ function renderSessions(sessions) {
 }
 
 async function startTimelapse() {
-  const intervalHours = parseFloat(document.getElementById('tl-interval').value);
+  const intervalHours = parseDE(document.getElementById('tl-interval').value);
   const intervalSecs  = Math.round(intervalHours * 3600);
   const camIdx        = parseInt(document.getElementById('tl-cam-idx').value);
   const [capW, capH]  = document.getElementById('tl-resolution').value.split('x').map(Number);

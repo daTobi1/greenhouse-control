@@ -119,7 +119,7 @@
       <div class="control-row" data-tooltip="Zieltemperatur im Gewächshaus. Der Lüfter läuft, wenn die Innentemperatur diesen Wert überschreitet und es draußen kühler ist.">
         <label>Ziel-Temperatur</label>
         <div class="input-group">
-          <input type="number" id="target-temp" min="-10" max="50" step="0.5" />
+          <input type="text" inputmode="decimal" id="target-temp" placeholder="25,0" />
           <span class="unit">°C</span>
         </div>
       </div>
@@ -145,7 +145,7 @@
       <div class="control-row" data-tooltip="Temperaturdifferenz zur Zieltemperatur, bei der der Lüfter die maximale Drehzahl erreicht. Kleiner Wert = empfindlichere Regelung.">
         <label>Temp.-Regelbereich</label>
         <div class="input-group">
-          <input type="number" id="temp-range" min="1" max="20" step="0.5" />
+          <input type="text" inputmode="decimal" id="temp-range" placeholder="5,0" />
           <span class="unit">°C</span>
         </div>
       </div>
@@ -161,9 +161,9 @@
       <div class="control-row" data-tooltip="Mindest- und Maximaldrehzahl des Lüfters (0 = aus, 1 = 100 %). Unterhalb des Minimums wird der Lüfter komplett abgeschaltet.">
         <label>Lüfter min / max</label>
         <div class="input-group compact">
-          <input type="number" id="fan-min" min="0" max="1" step="0.05" placeholder="min" />
+          <input type="text" inputmode="decimal" id="fan-min" placeholder="0,2" />
           <span>/</span>
-          <input type="number" id="fan-max" min="0" max="1" step="0.05" placeholder="max" />
+          <input type="text" inputmode="decimal" id="fan-max" placeholder="1,0" />
         </div>
       </div>
 
@@ -239,7 +239,7 @@
       </div>
       <div class="control-row" data-tooltip="Zeitabstand zwischen zwei Timelapse-Aufnahmen in Stunden. Z. B. 0.5 = alle 30 Minuten ein Bild.">
         <label>Intervall (Stunden)</label>
-        <input type="number" id="tl-interval" min="0.1" max="24" step="0.1" value="1" />
+        <input type="text" inputmode="decimal" id="tl-interval" placeholder="1,0" />
       </div>
       <div class="control-row" data-tooltip="Kamera für die Timelapse-Aufnahmen auswählen. Mit dem Pfeil-Button werden angeschlossene Kameras neu gesucht.">
         <label>Kamera</label>
