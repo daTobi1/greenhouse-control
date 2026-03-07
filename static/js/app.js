@@ -519,7 +519,6 @@ async function fetchTimelapse() {
 
     // Update timelapse form from settings (interval stored in seconds, displayed in hours)
     document.getElementById('tl-interval').value = parseFloat(((d.interval ?? 3600) / 3600).toFixed(2));
-    document.getElementById('tl-fps').value = d.fps ?? 25;
     document.getElementById('tl-capture-mode').value = d.capture_mode ?? 'still';
     document.getElementById('tl-clip-duration').value = d.clip_duration ?? 5;
     document.getElementById('tl-clip-fps').value = d.clip_fps ?? 10;
@@ -552,9 +551,6 @@ function renderSessions(sessions) {
       <span class="session-name">${s.name}${s.active ? ' ●' : ''}</span>
       <span class="session-info">${s.frame_count} ${s.capture_mode === 'clip' ? 'Clips' : 'Bilder'}</span>
       <div class="session-actions">
-        ${s.has_video
-          ? `<a href="${s.video_url}" download class="btn-small">&#11123;</a>`
-          : `<button class="btn-small" onclick="compileSession('${s.name}')">Kompil.</button>`}
         ${!s.active
           ? `<button class="btn-small" style="color:var(--danger)"
                onclick="deleteSession('${s.name}')">&#10005;</button>`
@@ -566,7 +562,6 @@ function renderSessions(sessions) {
 async function startTimelapse() {
   const intervalHours = parseFloat(document.getElementById('tl-interval').value);
   const intervalSecs  = Math.round(intervalHours * 3600);
-  const fps           = parseInt(document.getElementById('tl-fps').value);
   const camIdx        = parseInt(document.getElementById('tl-cam-idx').value);
   const [capW, capH]  = document.getElementById('tl-resolution').value.split('x').map(Number);
   const captureMode   = document.getElementById('tl-capture-mode').value;
@@ -578,7 +573,6 @@ async function startTimelapse() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       timelapse_interval: intervalSecs,
-      timelapse_fps: fps,
       camera_index: camIdx,
       camera_capture_width: capW,
       camera_capture_height: capH,
@@ -610,28 +604,6 @@ async function stopTimelapse() {
   loadSessions();
 }
 
-async function compileSession(session) {
-  showToast('Kompilierung gestartet…', 4000);
-  const r = await fetch(`${API}/api/timelapse/compile/${session}`, { method: 'POST' });
-  if (r.ok) {
-    pollCompileStatus(session);
-  } else {
-    showToast('Kompilierung fehlgeschlagen');
-  }
-}
-
-async function pollCompileStatus(session) {
-  const r = await fetch(`${API}/api/timelapse/compile/${session}/status`);
-  const d = await r.json();
-  if (d.status === 'running') {
-    setTimeout(() => pollCompileStatus(session), 3000);
-  } else if (d.status === 'done') {
-    showToast('Video fertig!');
-    loadSessions();
-  } else {
-    showToast('Kompilierung fehlgeschlagen');
-  }
-}
 
 async function deleteSession(session) {
   if (!confirm(`Aufnahme "${session}" löschen?`)) return;
