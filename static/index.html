@@ -229,16 +229,12 @@
         </select>
       </div>
       <div id="clip-options" class="hidden">
-        <div class="control-row" data-tooltip="Länge des aufgezeichneten Clips in Sekunden.">
+        <div class="control-row" data-tooltip="Länge des aufgezeichneten Clips in Sekunden. In diesem Abstand wird jeweils ein Clip erstellt.">
           <label>Clip-Dauer</label>
           <div class="input-group">
             <input type="number" id="tl-clip-duration" min="1" max="60" step="1" value="5" />
             <span class="unit">s</span>
           </div>
-        </div>
-        <div class="control-row" data-tooltip="Bildrate der Clip-Aufnahme in Frames pro Sekunde.">
-          <label>Clip-FPS</label>
-          <input type="number" id="tl-clip-fps" min="1" max="30" step="1" value="10" />
         </div>
       </div>
       <div class="control-row" data-tooltip="Zeitabstand zwischen zwei Timelapse-Aufnahmen in Stunden. Z. B. 0.5 = alle 30 Minuten ein Bild.">
@@ -263,6 +259,10 @@
         <select id="tl-resolution">
           <option value="0x0">Kamera Standard</option>
         </select>
+      </div>
+      <div class="control-row" data-tooltip="Bildrate der Kameraaufnahme (Frames pro Sekunde). Bei Clips bestimmt dies die Flüssigkeit des aufgenommenen Videos.">
+        <label>Aufnahme-FPS</label>
+        <input type="number" id="tl-clip-fps" min="1" max="30" step="1" value="10" />
       </div>
 
       <div class="btn-row">
