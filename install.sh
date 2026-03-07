@@ -218,6 +218,22 @@ if ! command -v systemctl >/dev/null 2>&1; then
   warn "systemd nicht gefunden – Service wird nicht eingerichtet."
   warn "Manuell starten: cd $INSTALL_DIR && source venv/bin/activate && uvicorn main:app --host 0.0.0.0 --port $PORT"
 else
+  # Autostart-Abfrage
+  AUTOSTART=true
+  echo ""
+  echo -e "  Soll die Gewächshaus-Steuerung bei jedem Systemstart"
+  echo -e "  automatisch gestartet werden?"
+  echo ""
+  echo -e "  ${GREEN}[j]${NC} Ja, automatisch starten  ${YELLOW}(empfohlen)${NC}"
+  echo -e "  ${YELLOW}[n]${NC} Nein, nur manuell starten"
+  echo ""
+  read -rp "  Auswahl [J/n]: " AUTOSTART_CHOICE
+
+  case "${AUTOSTART_CHOICE,,}" in
+    n|nein|no) AUTOSTART=false ;;
+    *)          AUTOSTART=true  ;;
+  esac
+
   sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null <<EOF
 [Unit]
 Description=Greenhouse Control Dashboard
@@ -238,7 +254,17 @@ WantedBy=multi-user.target
 EOF
 
   sudo systemctl daemon-reload
-  sudo systemctl enable "${SERVICE_NAME}.service" --quiet
+
+  if [ "$AUTOSTART" = true ]; then
+    sudo systemctl enable "${SERVICE_NAME}.service" --quiet
+    ok "Autostart aktiviert"
+  else
+    sudo systemctl disable "${SERVICE_NAME}.service" --quiet 2>/dev/null || true
+    ok "Autostart deaktiviert – manuell starten mit:"
+    info "  sudo systemctl start ${SERVICE_NAME}"
+  fi
+
+  # Einmalig jetzt starten
   sudo systemctl restart "${SERVICE_NAME}.service"
 
   sleep 3
