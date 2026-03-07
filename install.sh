@@ -5,6 +5,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/daTobi1/greenhouse-control/master/install.sh | bash
 # oder lokal:
 #   bash install.sh
+#
+# Voraussetzung: Debian 12 Bookworm / Raspberry Pi OS Bookworm (minimal)
 # ============================================================
 set -euo pipefail
 
@@ -14,38 +16,129 @@ SERVICE_NAME="greenhouse"
 PORT="${GREENHOUSE_PORT:-8080}"
 SERVICE_USER="${USER:-pi}"
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
-info()  { echo -e "${BLUE}[INFO]${NC}  $*"; }
-ok()    { echo -e "${GREEN}[OK]${NC}    $*"; }
-warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
-error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
+info()    { echo -e "${BLUE}[INFO]${NC}  $*"; }
+ok()      { echo -e "${GREEN}[OK]${NC}    $*"; }
+warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
+step()    { echo -e "\n${BOLD}$*${NC}"; }
+error()   { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
 echo ""
 echo "============================================================"
-echo "  Greenhouse Control – Installation"
-echo "  Zielverzeichnis: $INSTALL_DIR"
-echo "  Port: $PORT"
+echo -e "  ${BOLD}Greenhouse Control – Installation${NC}"
+echo "  Zielverzeichnis : $INSTALL_DIR"
+echo "  Port            : $PORT"
+echo "  Benutzer        : $SERVICE_USER"
 echo "============================================================"
 echo ""
 
-# ── Voraussetzungen prüfen ──────────────────────────────────
-command -v python3 >/dev/null 2>&1 || error "Python3 nicht gefunden"
-command -v git     >/dev/null 2>&1 || error "git nicht gefunden"
+# ── Root-Rechte prüfen ──────────────────────────────────────
+if ! sudo -n true 2>/dev/null; then
+  info "sudo-Passwort wird für Systeminstallationen benötigt."
+fi
+
+# ── Basiswerkzeuge sicherstellen ────────────────────────────
+step "1/7  Basiswerkzeuge prüfen und installieren"
+
+if ! command -v apt-get >/dev/null 2>&1; then
+  error "apt-get nicht gefunden – dieses Script benötigt Debian/Raspberry Pi OS."
+fi
+
+sudo apt-get update -qq
+
+for pkg in curl git ca-certificates; do
+  if ! dpkg -s "$pkg" &>/dev/null; then
+    info "Installiere $pkg..."
+    sudo apt-get install -y "$pkg" -qq
+  fi
+done
+ok "Basiswerkzeuge vorhanden"
+
+# ── Python-Version prüfen ───────────────────────────────────
+step "2/7  Python prüfen"
+
+# Python 3 installieren falls nicht vorhanden
+if ! command -v python3 >/dev/null 2>&1; then
+  info "Python3 nicht gefunden – installiere..."
+  sudo apt-get install -y python3 python3-pip python3-venv -qq
+fi
+
+PY_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+PY_MAJOR=$(python3 -c "import sys; print(sys.version_info.major)")
+PY_MINOR=$(python3 -c "import sys; print(sys.version_info.minor)")
+
+info "Python $PY_VERSION gefunden"
+
+if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 10 ]; }; then
+  error "Python 3.10 oder neuer wird benötigt (gefunden: $PY_VERSION).
+
+  Raspberry Pi OS / Debian Bullseye liefert nur Python 3.9.
+  Bitte auf Bookworm upgraden:
+    https://www.raspberrypi.com/software/
+
+  Alternativ (nur für erfahrene Nutzer):
+    sudo apt-get install -y python3.11 python3.11-venv python3.11-pip"
+fi
+
+ok "Python $PY_VERSION – OK"
 
 # ── System-Pakete installieren ──────────────────────────────
-info "Installiere System-Pakete..."
-sudo apt-get update -qq
-sudo apt-get install -y \
-  python3-pip python3-venv \
-  ffmpeg \
-  bluetooth bluez libbluetooth-dev libglib2.0-dev \
-  libcap2-bin \
-  2>/dev/null || warn "Einige Pakete konnten nicht installiert werden (nicht Raspberry Pi OS?)"
+step "3/7  System-Pakete installieren"
 
-# OpenCV: System-Paket bevorzugen
-sudo apt-get install -y python3-opencv 2>/dev/null || true
+SYSTEM_PKGS=(
+  # Python Build-Tools
+  python3-pip python3-venv python3-dev build-essential pkg-config
 
-# ── Repo klonen oder aktualisieren ─────────────────────────
+  # Bluetooth / BLE
+  bluetooth bluez bluez-tools libbluetooth-dev libglib2.0-dev
+  dbus libdbus-1-dev rfkill
+
+  # Kamera / Video
+  ffmpeg v4l-utils
+
+  # System-Dienste & Werkzeuge
+  libcap2-bin libssl-dev
+)
+
+info "Installiere System-Pakete (kann etwas dauern)..."
+sudo apt-get install -y "${SYSTEM_PKGS[@]}" -qq || \
+  warn "Einige Pakete konnten nicht installiert werden."
+
+# OpenCV als System-Paket (schneller als pip auf ARM)
+if ! python3 -c "import cv2" 2>/dev/null; then
+  info "Versuche System-OpenCV zu installieren..."
+  sudo apt-get install -y python3-opencv -qq 2>/dev/null || true
+fi
+
+ok "System-Pakete installiert"
+
+# ── Bluetooth einrichten ────────────────────────────────────
+step "4/7  Bluetooth einrichten"
+
+sudo systemctl enable bluetooth.service --quiet 2>/dev/null || true
+sudo systemctl start  bluetooth.service         2>/dev/null || true
+
+# Bluetooth-Blockierung aufheben (falls soft-blocked)
+if command -v rfkill >/dev/null 2>&1; then
+  sudo rfkill unblock bluetooth 2>/dev/null || true
+  ok "Bluetooth entsperrt (rfkill)"
+fi
+
+# Benutzer zur bluetooth-Gruppe hinzufügen
+if getent group bluetooth >/dev/null 2>&1; then
+  sudo usermod -a -G bluetooth "$SERVICE_USER" 2>/dev/null || true
+  ok "Benutzer '$SERVICE_USER' zur Gruppe 'bluetooth' hinzugefügt"
+fi
+
+# Benutzer zur video-Gruppe hinzufügen (Kamera-Zugriff)
+if getent group video >/dev/null 2>&1; then
+  sudo usermod -a -G video "$SERVICE_USER" 2>/dev/null || true
+  ok "Benutzer '$SERVICE_USER' zur Gruppe 'video' hinzugefügt"
+fi
+
+# ── Repo klonen oder aktualisieren ──────────────────────────
+step "5/7  Repository"
+
 if [ -d "$INSTALL_DIR/.git" ]; then
   info "Vorhandene Installation gefunden – aktualisiere..."
   git -C "$INSTALL_DIR" fetch --quiet origin
@@ -60,37 +153,72 @@ fi
 cd "$INSTALL_DIR"
 
 # ── Python Virtual Environment ──────────────────────────────
-info "Richte Python Virtual Environment ein..."
+step "6/7  Python-Umgebung"
+
+info "Erstelle Virtual Environment..."
 python3 -m venv venv
 source venv/bin/activate
 
-pip install --quiet --upgrade pip
-pip install --quiet fastapi "uvicorn[standard]" aiosqlite bleak
+pip install --quiet --upgrade pip setuptools wheel
 
-# RPi.GPIO (nur auf Raspberry Pi)
-python3 -c "import RPi.GPIO" 2>/dev/null || \
-  pip install --quiet RPi.GPIO 2>/dev/null || \
-  warn "RPi.GPIO nicht verfügbar (kein Raspberry Pi?)"
+# requirements.txt installieren
+info "Installiere Python-Abhängigkeiten..."
+pip install --quiet -r requirements.txt
 
-# OpenCV: pip-Fallback wenn System-Paket fehlt
-python3 -c "import cv2" 2>/dev/null || \
+# OpenCV: pip-Fallback wenn System-Paket nicht im venv sichtbar
+if ! python3 -c "import cv2" 2>/dev/null; then
+  info "OpenCV nicht im venv – installiere opencv-python-headless..."
   pip install --quiet opencv-python-headless || \
-  warn "OpenCV nicht installiert – Kamera-Funktionen deaktiviert"
+    warn "OpenCV konnte nicht installiert werden – Kamera-Funktionen deaktiviert."
+fi
+
+# RPi.GPIO (Pi 1-4); Pi 5 nutzt gpiod
+if python3 -c "import RPi.GPIO" 2>/dev/null; then
+  ok "RPi.GPIO bereits vorhanden"
+elif pip install --quiet RPi.GPIO 2>/dev/null; then
+  ok "RPi.GPIO installiert"
+else
+  warn "RPi.GPIO nicht verfügbar (Pi 5 oder kein Raspberry Pi)."
+  warn "Lüftersteuerung läuft im Mock-Modus."
+fi
+
+# Importe verifizieren
+info "Überprüfe Python-Importe..."
+IMPORT_ERRORS=0
+for mod in fastapi uvicorn aiosqlite bleak; do
+  if python3 -c "import $mod" 2>/dev/null; then
+    ok "  $mod"
+  else
+    warn "  $mod FEHLT"
+    IMPORT_ERRORS=$((IMPORT_ERRORS + 1))
+  fi
+done
+if [ $IMPORT_ERRORS -gt 0 ]; then
+  warn "$IMPORT_ERRORS Python-Modul(e) fehlen – pip install -r requirements.txt manuell ausführen."
+fi
 
 deactivate
-ok "Python-Umgebung bereit"
 
-# ── Verzeichnisse anlegen ───────────────────────────────────
-mkdir -p "$INSTALL_DIR/timelapse/frames" "$INSTALL_DIR/timelapse/output"
-
-# ── Bluetooth-Berechtigung für Python ──────────────────────
+# ── BLE-Berechtigung setzen ─────────────────────────────────
 PYTHON_BIN="$(readlink -f "$INSTALL_DIR/venv/bin/python3")"
-sudo setcap 'cap_net_raw,cap_net_admin+eip' "$PYTHON_BIN" 2>/dev/null || \
-  warn "setcap fehlgeschlagen – BLE benötigt evtl. sudo"
+if sudo setcap 'cap_net_raw,cap_net_admin+eip' "$PYTHON_BIN" 2>/dev/null; then
+  ok "BLE-Rechte (setcap) gesetzt"
+else
+  warn "setcap fehlgeschlagen – BLE-Scan benötigt evtl. sudo."
+fi
 
-# ── systemd Service ─────────────────────────────────────────
-info "Installiere systemd Service..."
-sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null <<EOF
+# ── Verzeichnisse anlegen ────────────────────────────────────
+mkdir -p "$INSTALL_DIR/timelapse/frames" "$INSTALL_DIR/timelapse/output"
+ok "Verzeichnisse angelegt"
+
+# ── systemd Service ──────────────────────────────────────────
+step "7/7  systemd Service"
+
+if ! command -v systemctl >/dev/null 2>&1; then
+  warn "systemd nicht gefunden – Service wird nicht eingerichtet."
+  warn "Manuell starten: cd $INSTALL_DIR && source venv/bin/activate && uvicorn main:app --host 0.0.0.0 --port $PORT"
+else
+  sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null <<EOF
 [Unit]
 Description=Greenhouse Control Dashboard
 After=network.target bluetooth.target
@@ -109,28 +237,39 @@ Environment=PYTHONUNBUFFERED=1
 WantedBy=multi-user.target
 EOF
 
-sudo systemctl daemon-reload
-sudo systemctl enable "${SERVICE_NAME}.service" --quiet
-sudo systemctl restart "${SERVICE_NAME}.service"
+  sudo systemctl daemon-reload
+  sudo systemctl enable "${SERVICE_NAME}.service" --quiet
+  sudo systemctl restart "${SERVICE_NAME}.service"
 
-sleep 2
-if sudo systemctl is-active --quiet "${SERVICE_NAME}"; then
-  ok "Service läuft"
-else
-  warn "Service nicht gestartet – prüfe: sudo journalctl -u ${SERVICE_NAME} -n 30"
+  sleep 3
+  if sudo systemctl is-active --quiet "${SERVICE_NAME}"; then
+    ok "Service läuft"
+  else
+    warn "Service nicht gestartet – Logs:"
+    sudo journalctl -u "${SERVICE_NAME}" -n 20 --no-pager || true
+  fi
 fi
 
-# ── Fertig ──────────────────────────────────────────────────
+# ── Fertig ───────────────────────────────────────────────────
 IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
 echo ""
 echo "============================================================"
-echo -e "  ${GREEN}Installation abgeschlossen!${NC}"
+echo -e "  ${GREEN}${BOLD}Installation abgeschlossen!${NC}"
 echo ""
 echo "  Dashboard:  http://${IP}:${PORT}"
 echo ""
 echo "  Befehle:"
-echo "    Status:  sudo systemctl status ${SERVICE_NAME}"
-echo "    Logs:    sudo journalctl -u ${SERVICE_NAME} -f"
-echo "    Stopp:   sudo systemctl stop ${SERVICE_NAME}"
+echo "    Status:   sudo systemctl status ${SERVICE_NAME}"
+echo "    Logs:     sudo journalctl -u ${SERVICE_NAME} -f"
+echo "    Neustart: sudo systemctl restart ${SERVICE_NAME}"
+echo "    Stopp:    sudo systemctl stop ${SERVICE_NAME}"
+echo ""
+if id -nG "$SERVICE_USER" 2>/dev/null | grep -qw bluetooth; then
+  true
+else
+  echo -e "  ${YELLOW}Hinweis:${NC} Für Bluetooth bitte einmal ab- und wieder anmelden"
+  echo "  (Gruppenänderung wird erst nach neuem Login aktiv)."
+  echo ""
+fi
 echo "============================================================"
 echo ""
