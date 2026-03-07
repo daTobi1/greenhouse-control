@@ -467,6 +467,11 @@ async function loadCameras() {
   await loadResolutions(select.value);
 }
 
+function updateCaptureModeUI() {
+  const mode = document.getElementById('tl-capture-mode').value;
+  document.getElementById('clip-options').classList.toggle('hidden', mode !== 'clip');
+}
+
 async function loadResolutions(camIdx) {
   const sel = document.getElementById('tl-resolution');
   sel.innerHTML = '<option value="0x0">Kamera Standard</option>';
@@ -515,6 +520,10 @@ async function fetchTimelapse() {
     // Update timelapse form from settings (interval stored in seconds, displayed in hours)
     document.getElementById('tl-interval').value = parseFloat(((d.interval ?? 3600) / 3600).toFixed(2));
     document.getElementById('tl-fps').value = d.fps ?? 25;
+    document.getElementById('tl-capture-mode').value = d.capture_mode ?? 'still';
+    document.getElementById('tl-clip-duration').value = d.clip_duration ?? 5;
+    document.getElementById('tl-clip-fps').value = d.clip_fps ?? 10;
+    updateCaptureModeUI();
     // Sync dropdown selection without triggering a re-scan
     const camSel = document.getElementById('tl-cam-idx');
     camSel.value = String(d.camera_index ?? 0);
@@ -541,7 +550,7 @@ function renderSessions(sessions) {
   list.innerHTML = sessions.map(s => `
     <div class="session-item">
       <span class="session-name">${s.name}${s.active ? ' ●' : ''}</span>
-      <span class="session-info">${s.frame_count} Bilder</span>
+      <span class="session-info">${s.frame_count} ${s.capture_mode === 'clip' ? 'Clips' : 'Bilder'}</span>
       <div class="session-actions">
         ${s.has_video
           ? `<a href="${s.video_url}" download class="btn-small">&#11123;</a>`
@@ -560,6 +569,9 @@ async function startTimelapse() {
   const fps           = parseInt(document.getElementById('tl-fps').value);
   const camIdx        = parseInt(document.getElementById('tl-cam-idx').value);
   const [capW, capH]  = document.getElementById('tl-resolution').value.split('x').map(Number);
+  const captureMode   = document.getElementById('tl-capture-mode').value;
+  const clipDuration  = parseInt(document.getElementById('tl-clip-duration').value);
+  const clipFps       = parseInt(document.getElementById('tl-clip-fps').value);
 
   await fetch(`${API}/api/settings`, {
     method: 'PUT',
@@ -570,6 +582,9 @@ async function startTimelapse() {
       camera_index: camIdx,
       camera_capture_width: capW,
       camera_capture_height: capH,
+      capture_mode: captureMode,
+      clip_duration: clipDuration,
+      clip_fps: clipFps,
     })
   });
 

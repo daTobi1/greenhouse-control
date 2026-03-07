@@ -107,13 +107,16 @@ class Scheduler:
     async def _timelapse_loop(self):
         while self._running:
             try:
-                settings = await self._db.get_all_settings()
-                active   = settings.get("timelapse_active", False)
-                interval = float(settings.get("timelapse_interval", 300))
-                tl_path  = settings.get("timelapse_path", "timelapse")
-                cam_idx  = int(settings.get("camera_index", 0))
-                cap_w    = int(settings.get("camera_capture_width", 0))
-                cap_h    = int(settings.get("camera_capture_height", 0))
+                settings     = await self._db.get_all_settings()
+                active       = settings.get("timelapse_active", False)
+                interval     = float(settings.get("timelapse_interval", 300))
+                tl_path      = settings.get("timelapse_path", "timelapse")
+                cam_idx      = int(settings.get("camera_index", 0))
+                cap_w        = int(settings.get("camera_capture_width", 0))
+                cap_h        = int(settings.get("camera_capture_height", 0))
+                capture_mode = settings.get("capture_mode", "still")
+                clip_duration= float(settings.get("clip_duration", 5))
+                clip_fps     = int(settings.get("clip_fps", 10))
 
                 self._cam.setup(
                     frames_dir=f"{tl_path}/frames",
@@ -126,7 +129,12 @@ class Scheduler:
                 if active:
                     if not self._cam.is_capturing:
                         self._cam.start_session()
-                    self._cam.capture_frame()
+                    if capture_mode == "clip":
+                        await asyncio.to_thread(
+                            self._cam.capture_clip, clip_duration, clip_fps
+                        )
+                    else:
+                        await asyncio.to_thread(self._cam.capture_frame)
                 else:
                     if self._cam.is_capturing:
                         self._cam.stop_session()

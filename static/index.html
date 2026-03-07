@@ -221,6 +221,26 @@
         <span id="tl-frame-count" class="tl-frames"></span>
       </div>
 
+      <div class="control-row" data-tooltip="Standbild: ein JPEG pro Intervall. Kurzer Clip: ein kurzes MP4-Video pro Intervall.">
+        <label>Aufnahmemodus</label>
+        <select id="tl-capture-mode" onchange="updateCaptureModeUI()">
+          <option value="still">Standbild (JPEG)</option>
+          <option value="clip">Kurzer Clip (MP4)</option>
+        </select>
+      </div>
+      <div id="clip-options" class="hidden">
+        <div class="control-row" data-tooltip="Länge des aufgezeichneten Clips in Sekunden.">
+          <label>Clip-Dauer</label>
+          <div class="input-group">
+            <input type="number" id="tl-clip-duration" min="1" max="60" step="1" value="5" />
+            <span class="unit">s</span>
+          </div>
+        </div>
+        <div class="control-row" data-tooltip="Bildrate der Clip-Aufnahme in Frames pro Sekunde.">
+          <label>Clip-FPS</label>
+          <input type="number" id="tl-clip-fps" min="1" max="30" step="1" value="10" />
+        </div>
+      </div>
       <div class="control-row" data-tooltip="Zeitabstand zwischen zwei Timelapse-Aufnahmen in Stunden. Z. B. 0.5 = alle 30 Minuten ein Bild.">
         <label>Intervall (Stunden)</label>
         <input type="number" id="tl-interval" min="0.1" max="24" step="0.1" value="1" />

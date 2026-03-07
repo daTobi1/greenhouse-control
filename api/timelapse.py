@@ -27,6 +27,9 @@ async def get_status():
         "interval":        settings.get("timelapse_interval", 300),
         "fps":             settings.get("timelapse_fps", 25),
         "camera_index":    settings.get("camera_index", 0),
+        "capture_mode":    settings.get("capture_mode", "still"),
+        "clip_duration":   settings.get("clip_duration", 5),
+        "clip_fps":        settings.get("clip_fps", 10),
         "camera_available": state.camera_service._frames_dir is not None,
     }
 

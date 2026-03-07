@@ -5,6 +5,7 @@ and compiles them into a video using ffmpeg.
 
 import logging
 import subprocess
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -122,6 +123,55 @@ class CameraService:
         logger.debug(f"Frame {self._frame_count} captured → {filename.name}")
         return str(filename)
 
+    def capture_clip(self, duration: float = 5.0, clip_fps: int = 10) -> str | None:
+        """Record a short video clip into the current session directory."""
+        if not CV2_AVAILABLE:
+            return None
+        if not self._session:
+            logger.warning("capture_clip called without an active session")
+            return None
+
+        session_dir = self._frames_dir / self._session
+        cap = cv2.VideoCapture(self._camera_index)
+        if self._capture_width > 0 and self._capture_height > 0:
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH,  self._capture_width)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._capture_height)
+        if not cap.isOpened():
+            logger.error("Cannot open camera for clip")
+            return None
+
+        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        clip_path = session_dir / f"clip_{self._frame_count:06d}.mp4"
+
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        out = cv2.VideoWriter(str(clip_path), fourcc, float(clip_fps), (w, h))
+
+        frame_interval = 1.0 / clip_fps
+        end_time = time.monotonic() + duration
+        next_frame = time.monotonic()
+
+        while time.monotonic() < end_time:
+            now = time.monotonic()
+            if now >= next_frame:
+                ret, frame = cap.read()
+                if ret:
+                    out.write(frame)
+                next_frame += frame_interval
+            else:
+                time.sleep(min(0.005, next_frame - now))
+
+        cap.release()
+        out.release()
+
+        if clip_path.exists() and clip_path.stat().st_size > 0:
+            self._frame_count += 1
+            logger.debug(f"Clip {self._frame_count} captured → {clip_path.name}")
+            return str(clip_path)
+
+        clip_path.unlink(missing_ok=True)
+        return None
+
     def capture_preview(self) -> bytes | None:
         """Return a JPEG-encoded preview image for the dashboard."""
         if not CV2_AVAILABLE:
@@ -141,39 +191,53 @@ class CameraService:
     # ------------------------------------------------------------------
 
     def compile_timelapse(self, session: str, fps: int = 25) -> str | None:
-        """Compile all frames of a session into an MP4 using ffmpeg."""
+        """Compile all frames or clips of a session into an MP4 using ffmpeg."""
         session_dir = self._frames_dir / session
         if not session_dir.exists():
             logger.error(f"Session directory not found: {session_dir}")
             return None
 
+        clips  = sorted(session_dir.glob("clip_*.mp4"))
         frames = sorted(session_dir.glob("frame_*.jpg"))
-        if not frames:
-            logger.error("No frames found in session")
+
+        if not clips and not frames:
+            logger.error("No frames or clips found in session")
             return None
 
         output_file = self._output_dir / f"{session}.mp4"
         list_file   = self._output_dir / f"{session}_list.txt"
 
         try:
-            with open(list_file, "w") as f:
-                for frame in frames:
-                    f.write(f"file '{frame.absolute()}'\n")
-                    f.write(f"duration {1 / fps:.6f}\n")
+            if clips:
+                # Clip mode: concatenate mp4 segments (stream copy, fast)
+                with open(list_file, "w") as f:
+                    for clip in clips:
+                        f.write(f"file '{clip.absolute()}'\n")
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-f", "concat", "-safe", "0",
+                    "-i", str(list_file),
+                    "-c", "copy",
+                    str(output_file),
+                ]
+            else:
+                # Still mode: compile JPEGs into video
+                with open(list_file, "w") as f:
+                    for frame in frames:
+                        f.write(f"file '{frame.absolute()}'\n")
+                        f.write(f"duration {1 / fps:.6f}\n")
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-f", "concat", "-safe", "0",
+                    "-i", str(list_file),
+                    "-vf", f"fps={fps}",
+                    "-c:v", "libx264",
+                    "-pix_fmt", "yuv420p",
+                    "-crf", "23",
+                    str(output_file),
+                ]
 
-            cmd = [
-                "ffmpeg", "-y",
-                "-f", "concat", "-safe", "0",
-                "-i", str(list_file),
-                "-vf", "fps=25",
-                "-c:v", "libx264",
-                "-pix_fmt", "yuv420p",
-                "-crf", "23",
-                str(output_file),
-            ]
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=600
-            )
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
             list_file.unlink(missing_ok=True)
 
             if result.returncode == 0:
@@ -200,11 +264,15 @@ class CameraService:
             if not d.is_dir():
                 continue
             frames = sorted(d.glob("frame_*.jpg"))
+            clips  = sorted(d.glob("clip_*.mp4"))
+            count  = len(clips) if clips else len(frames)
+            mode   = "clip" if clips else "still"
             output = self._output_dir / f"{d.name}.mp4"
             sessions.append(
                 {
                     "name": d.name,
-                    "frame_count": len(frames),
+                    "frame_count": count,
+                    "capture_mode": mode,
                     "has_video": output.exists(),
                     "video_url": f"/api/timelapse/video/{d.name}" if output.exists() else None,
                     "active": d.name == self._session,

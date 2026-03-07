@@ -31,6 +31,9 @@ DEFAULT_SETTINGS = {
     "timelapse_share_enabled": False,
     "camera_capture_width": 0,   # 0 = camera default
     "camera_capture_height": 0,
+    "capture_mode": "still",     # still | clip
+    "clip_duration": 5,          # seconds per clip
+    "clip_fps": 10,              # fps of recorded clip
 }
 
 
