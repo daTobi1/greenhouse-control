@@ -988,7 +988,7 @@ function esc(str) {
   return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
-function updateShareUrl(enabled) {
+async function updateShareUrl(enabled) {
   const wrap = document.getElementById('share-url-wrap');
   if (enabled) {
     wrap.classList.remove('hidden');
@@ -999,6 +999,12 @@ function updateShareUrl(enabled) {
   } else {
     wrap.classList.add('hidden');
   }
+  // Sofort speichern damit die URL beim Klick auch wirklich erreichbar ist
+  await fetch(`${API}/api/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ timelapse_share_enabled: enabled }),
+  });
 }
 
 async function saveSettings() {
