@@ -50,9 +50,11 @@ else
   SERVICE_USER="${INPUT_USER:-$DEFAULT_USER}"
 fi
 
-# Prüfe ob Benutzer existiert
+# Prüfe ob Benutzer existiert, ggf. anlegen
 if ! id "$SERVICE_USER" &>/dev/null; then
-  error "Benutzer '$SERVICE_USER' existiert nicht auf diesem System."
+  info "Benutzer '$SERVICE_USER' existiert noch nicht – wird angelegt..."
+  sudo useradd -m -s /bin/bash "$SERVICE_USER"
+  ok "Benutzer '$SERVICE_USER' angelegt (Home: /home/${SERVICE_USER})"
 fi
 
 INSTALL_DIR="${GREENHOUSE_DIR:-/home/${SERVICE_USER}/greenhouse-control}"
