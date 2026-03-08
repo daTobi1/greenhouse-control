@@ -178,6 +178,24 @@ if getent group netdev >/dev/null 2>&1; then
   ok "Benutzer '$SERVICE_USER' zur Gruppe 'netdev' hinzugefügt"
 fi
 
+# Benutzer zur gpio-Gruppe hinzufügen (GPIO-Zugriff)
+if getent group gpio >/dev/null 2>&1; then
+  sudo usermod -a -G gpio "$SERVICE_USER" 2>/dev/null || true
+  ok "Benutzer '$SERVICE_USER' zur Gruppe 'gpio' hinzugefügt"
+fi
+
+# sudoers-Regel: Reboot, Shutdown und Service-Neustart ohne Passwort
+SUDOERS_FILE="/etc/sudoers.d/greenhouse"
+sudo tee "$SUDOERS_FILE" > /dev/null <<EOF
+# Greenhouse Control – erlaubt dem Service-User System-Operationen
+${SERVICE_USER} ALL=(ALL) NOPASSWD: /sbin/reboot
+${SERVICE_USER} ALL=(ALL) NOPASSWD: /sbin/shutdown
+${SERVICE_USER} ALL=(ALL) NOPASSWD: /bin/systemctl restart greenhouse
+${SERVICE_USER} ALL=(ALL) NOPASSWD: /bin/systemctl restart greenhouse.service
+EOF
+sudo chmod 440 "$SUDOERS_FILE"
+ok "sudo-Rechte für Reboot/Shutdown/Restart eingerichtet"
+
 # Polkit-Regel für WLAN-Steuerung via NetworkManager
 POLKIT_RULES_DIR="/etc/polkit-1/rules.d"
 POLKIT_LEGACY_DIR="/etc/polkit-1/localauthority/50-local.d"
