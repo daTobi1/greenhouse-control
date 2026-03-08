@@ -60,6 +60,12 @@ def _parse_nmcli_line(line: str) -> list[str]:
 @router.get("/status")
 async def wifi_status():
     """Aktueller WLAN-Verbindungsstatus."""
+    # Prüfe ob WLAN-Radio an/aus ist
+    wifi_enabled = True
+    rc_radio, out_radio, _ = await _run(["nmcli", "radio", "wifi"])
+    if rc_radio == 0:
+        wifi_enabled = out_radio.strip().lower() == "enabled"
+
     rc, out, err = await _run(["nmcli", "-t", "-f", "ACTIVE,SSID,SIGNAL,FREQ,SECURITY", "dev", "wifi"])
 
     if rc != 0:
@@ -74,6 +80,7 @@ async def wifi_status():
                 "frequency": None,
                 "security": None,
                 "ip": await _get_ip(),
+                "wifi_enabled": wifi_enabled,
                 "mock_mode": False,
             }
         return {
@@ -83,6 +90,7 @@ async def wifi_status():
             "frequency": None,
             "security": None,
             "ip": None,
+            "wifi_enabled": wifi_enabled,
             "mock_mode": True,
         }
 
@@ -97,6 +105,7 @@ async def wifi_status():
                 "frequency": parts[3],
                 "security": parts[4],
                 "ip": await _get_ip(),
+                "wifi_enabled": wifi_enabled,
                 "mock_mode": False,
             }
 
@@ -107,6 +116,7 @@ async def wifi_status():
         "frequency": None,
         "security": None,
         "ip": await _get_ip(),
+        "wifi_enabled": wifi_enabled,
         "mock_mode": False,
     }
 
@@ -230,3 +240,16 @@ async def wifi_disconnect():
             content={"error": "Trennen fehlgeschlagen", "detail": err.strip()},
         )
     return {"connected": False}
+
+
+@router.post("/radio")
+async def wifi_radio(enabled: bool = True):
+    """WLAN-Adapter ein- oder ausschalten."""
+    state = "on" if enabled else "off"
+    rc, _, err = await _run(["nmcli", "radio", "wifi", state])
+    if rc != 0:
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"WLAN {state} fehlgeschlagen", "detail": err.strip()},
+        )
+    return {"wifi_enabled": enabled}

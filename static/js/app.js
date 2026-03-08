@@ -890,15 +890,36 @@ async function fetchWifiStatus() {
     const ipEl     = document.getElementById('wifi-conn-ip');
     const dot      = document.getElementById('dot-wifi');
 
+    const toggleBtn = document.getElementById('btn-wifi-toggle');
+
     if (d.mock_mode) {
       statusEl.textContent = 'Nicht verfügbar (Mock)';
       statusEl.style.color = 'var(--text3)';
       ssidEl.textContent = '--';
       signalEl.textContent = '--';
       ipEl.textContent = '--';
+      toggleBtn.textContent = '--';
+      toggleBtn.disabled = true;
       dot.className = 'status-dot';
       return;
     }
+
+    // WLAN-Adapter an/aus
+    toggleBtn.disabled = false;
+    if (d.wifi_enabled === false) {
+      statusEl.textContent = 'WLAN ausgeschaltet';
+      statusEl.style.color = 'var(--text3)';
+      ssidEl.textContent = '--';
+      signalEl.textContent = '--';
+      ipEl.textContent = d.ip || '--';
+      dot.className = 'status-dot';
+      toggleBtn.textContent = 'Einschalten';
+      toggleBtn.className = 'btn-small';
+      return;
+    }
+
+    toggleBtn.textContent = 'Ausschalten';
+    toggleBtn.className = 'btn-small btn-small-danger';
 
     if (d.connected) {
       statusEl.textContent = 'Verbunden';
@@ -997,6 +1018,33 @@ function wifiSelectNetwork(idx) {
 function toggleWifiPass() {
   const inp = document.getElementById('wifi-manual-pass');
   inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+async function toggleWifiRadio() {
+  const btn = document.getElementById('btn-wifi-toggle');
+  const turningOn = btn.textContent === 'Einschalten';
+
+  if (!turningOn && !confirm('WLAN wirklich ausschalten?\n\nWenn der Pi nur per WLAN erreichbar ist, verlierst du die Verbindung zum Dashboard.')) {
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = turningOn ? 'Schalte ein...' : 'Schalte aus...';
+
+  try {
+    const r = await fetch(`${API}/api/wifi/radio?enabled=${turningOn}`, { method: 'POST' });
+    const d = await r.json();
+    if (r.ok) {
+      showToast(turningOn ? 'WLAN eingeschaltet' : 'WLAN ausgeschaltet');
+      setTimeout(fetchWifiStatus, 2000);
+    } else {
+      showToast(d.error || 'Fehler');
+      btn.disabled = false;
+    }
+  } catch(e) {
+    showToast('Verbindungsfehler');
+    btn.disabled = false;
+  }
 }
 
 async function wifiConnectManual() {

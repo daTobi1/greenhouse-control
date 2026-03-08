@@ -907,6 +907,9 @@ select {
 }
 .status-label.clickable:hover { color: var(--text); }
 
+.btn-small-danger { background: #7b1a18; border-color: #7b1a18; color: var(--text); }
+.btn-small-danger:hover { background: var(--danger); border-color: var(--danger); }
+
 /* ============================================================
    Toast
 ============================================================ */
