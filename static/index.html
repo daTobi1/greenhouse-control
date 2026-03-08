@@ -168,6 +168,14 @@
         </div>
       </div>
 
+      <div class="control-row" data-tooltip="Totzone (Hysterese): Der Lüfter startet erst, wenn der berechnete Sollwert diese Schwelle überschreitet. Einmal gestartet, läuft er bis die Bedingung komplett entfällt. Verhindert häufiges Ein-/Ausschalten.">
+        <label>Totzone</label>
+        <div class="input-group">
+          <input type="text" inputmode="decimal" id="fan-deadband" placeholder="10" />
+          <span class="unit">%</span>
+        </div>
+      </div>
+
       <button class="btn full-width" onclick="saveControlSettings()">Speichern</button>
     </div>
 
@@ -320,11 +328,25 @@
         <pre id="upd-log" class="upd-log"></pre>
       </div>
 
+      <div id="upd-history-wrap" class="hidden" style="margin-top:.8rem">
+        <div class="card-label" style="margin-bottom:.4rem">Versionsverlauf</div>
+        <div id="upd-history-list" class="upd-history"></div>
+      </div>
+
+      <div id="upd-reboot-dialog" class="hidden" style="margin:1rem 0 .5rem;padding:1rem;background:var(--bg3);border:1px solid var(--border);border-radius:8px;text-align:center">
+        <div style="margin-bottom:.8rem;color:var(--text2);font-size:.9rem">Pi neu starten?</div>
+        <div style="display:flex;gap:.6rem;justify-content:center;flex-wrap:wrap">
+          <button class="btn" onclick="rebootPi()">Jetzt neu starten</button>
+          <button class="btn btn-secondary" onclick="reloadAfterUpdate()">Nur Dashboard neu laden</button>
+        </div>
+      </div>
+
       <div class="modal-footer">
         <button class="btn" id="btn-do-update" onclick="applyUpdate()" disabled>
           Update installieren
         </button>
-        <button class="btn btn-secondary" onclick="checkUpdate()">&#8635; Erneut prüfen</button>
+        <button class="btn btn-secondary" id="btn-recheck" onclick="checkUpdate()">&#8635; Erneut prüfen</button>
+        <button class="btn btn-secondary" id="btn-history" onclick="toggleHistory()">&#8635; Verlauf</button>
         <span id="upd-spinner" class="hidden" style="color:var(--text3);font-size:.82rem">Läuft…</span>
       </div>
     </div>

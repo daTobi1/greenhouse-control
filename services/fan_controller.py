@@ -33,6 +33,7 @@ class FanController:
         self._pwm = None
         self._current_speed: float = 0.0
         self._mock = not GPIO_AVAILABLE
+        self._is_active: bool = False  # hysteresis state
 
     # ------------------------------------------------------------------
     # Setup / teardown
@@ -106,6 +107,7 @@ class FanController:
         humidity_range   = settings.get("humidity_control_range", 20.0)
         fan_min          = settings.get("fan_min_speed", 0.2)
         fan_max          = settings.get("fan_max_speed", 1.0)
+        deadband         = settings.get("fan_deadband", 0.1)
         mode             = settings.get("control_mode", "combined")
 
         if not inside:
@@ -139,7 +141,14 @@ class FanController:
             raw = max(speed_temp, speed_hum)
 
         if raw <= 0:
+            self._is_active = False
             return 0.0
 
+        # Hysteresis: only start if raw exceeds deadband; once running, keep
+        # running until raw drops to 0 (handled above).
+        if not self._is_active and raw <= deadband:
+            return 0.0
+
+        self._is_active = True
         # Scale into [fan_min, fan_max]
         return fan_min + raw * (fan_max - fan_min)

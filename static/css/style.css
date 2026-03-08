@@ -596,6 +596,25 @@ select {
   margin-top: .3rem;
 }
 
+.upd-history { margin-top: .3rem; display: flex; flex-direction: column; gap: .3rem; max-height: 220px; overflow-y: auto; }
+
+.upd-commit {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .45rem .6rem;
+  background: var(--bg3);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-size: .8rem;
+}
+.upd-commit.current { border-color: var(--accent2); }
+.upd-commit-meta { display: flex; align-items: center; gap: .5rem; flex-shrink: 0; }
+.upd-commit-meta code { font-family: monospace; color: var(--accent2); background: var(--bg2); padding: .1rem .35rem; border-radius: 4px; }
+.upd-commit-meta .upd-date { color: var(--text3); font-size: .75rem; }
+.upd-commit-subject { flex: 1; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upd-commit .btn-small { flex-shrink: 0; }
+
 /* ============================================================
    Folder Picker
 ============================================================ */

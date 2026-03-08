@@ -227,7 +227,19 @@ else
   echo -e "  ${GREEN}[j]${NC} Ja, automatisch starten  ${YELLOW}(empfohlen)${NC}"
   echo -e "  ${YELLOW}[n]${NC} Nein, nur manuell starten"
   echo ""
-  read -rp "  Auswahl [J/n]: " AUTOSTART_CHOICE
+  AUTOSTART_CHOICE=""
+  for i in $(seq 60 -1 1); do
+    printf "\r  Auswahl [J/n] (automatisch Ja in %2ds): " "$i"
+    if read -rn1 -t1 AUTOSTART_CHOICE 2>/dev/null; then
+      echo ""
+      break
+    fi
+  done
+  if [ -z "$AUTOSTART_CHOICE" ]; then
+    echo ""
+    echo "  → Zeitüberschreitung – Autostart wird aktiviert"
+    AUTOSTART_CHOICE="j"
+  fi
 
   case "${AUTOSTART_CHOICE,,}" in
     n|nein|no) AUTOSTART=false ;;

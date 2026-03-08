@@ -311,6 +311,7 @@ async function loadControlSettings() {
     document.getElementById('hum-range').value     = s.humidity_control_range ?? 20;
     document.getElementById('fan-min').value       = formatDE((s.fan_min_speed ?? 0.2) * 100, 0);
     document.getElementById('fan-max').value       = formatDE((s.fan_max_speed ?? 1.0) * 100, 0);
+    document.getElementById('fan-deadband').value  = formatDE((s.fan_deadband ?? 0.1) * 100, 0);
   } catch(e) {}
 }
 
@@ -323,6 +324,7 @@ async function saveControlSettings() {
     humidity_control_range:  parseFloat(document.getElementById('hum-range').value),
     fan_min_speed:           parseDE(document.getElementById('fan-min').value) / 100,
     fan_max_speed:           parseDE(document.getElementById('fan-max').value) / 100,
+    fan_deadband:            parseDE(document.getElementById('fan-deadband').value) / 100,
   };
   await fetch(`${API}/api/settings`, {
     method: 'PUT',
@@ -569,8 +571,15 @@ async function fetchTimelapse() {
       document.getElementById('btn-tl-stop').disabled  = true;
     }
 
-    // Update timelapse form from settings (interval stored in seconds, displayed in hours)
-    document.getElementById('tl-interval').value = formatDE((d.interval ?? 3600) / 3600, 4);
+    // Update timelapse form from settings (interval stored in seconds, displayed in hours).
+    // Only overwrite if field is empty (initial load) or already matches the server value,
+    // so a user-typed value that hasn't been saved yet is never clobbered by the poll.
+    const tlIntervalEl = document.getElementById('tl-interval');
+    const serverSecs   = d.interval ?? 3600;
+    const uiSecs       = Math.round(parseDE(tlIntervalEl.value) * 3600);
+    if (isNaN(uiSecs) || uiSecs === serverSecs) {
+      tlIntervalEl.value = formatDE(serverSecs / 3600, 4);
+    }
     document.getElementById('tl-capture-mode').value = d.capture_mode ?? 'still';
     document.getElementById('tl-clip-duration').value = d.clip_duration ?? 5;
     document.getElementById('tl-clip-fps').value = d.clip_fps ?? 10;
@@ -762,10 +771,12 @@ async function pollUpdateStatus() {
     if (d.status === 'running') {
       setTimeout(pollUpdateStatus, 1500);
     } else if (d.status === 'done') {
-      document.getElementById('upd-status-text').textContent = 'Update abgeschlossen – Seite wird neu geladen…';
+      document.getElementById('upd-status-text').textContent = 'Update abgeschlossen';
       document.getElementById('upd-spinner').classList.add('hidden');
       document.getElementById('update-badge').classList.add('hidden');
-      setTimeout(() => location.reload(), 4000);
+      document.getElementById('btn-do-update').classList.add('hidden');
+      document.getElementById('btn-recheck').classList.add('hidden');
+      document.getElementById('upd-reboot-dialog').classList.remove('hidden');
     } else {
       document.getElementById('upd-status-text').textContent = 'Fehler beim Update';
       document.getElementById('upd-spinner').classList.add('hidden');
@@ -777,7 +788,91 @@ async function pollUpdateStatus() {
   }
 }
 
+function reloadAfterUpdate() {
+  location.reload();
+}
+
+let _historyVisible = false;
+
+async function toggleHistory() {
+  const wrap = document.getElementById('upd-history-wrap');
+  _historyVisible = !_historyVisible;
+  wrap.classList.toggle('hidden', !_historyVisible);
+  if (_historyVisible) await loadVersionHistory();
+}
+
+async function loadVersionHistory() {
+  const list = document.getElementById('upd-history-list');
+  list.innerHTML = '<span style="color:var(--text3);font-size:.8rem">Lade…</span>';
+  try {
+    const r = await fetch(`${API}/api/update/history`);
+    const d = await r.json();
+    if (d.error || !d.commits.length) {
+      list.innerHTML = `<span style="color:var(--text3);font-size:.8rem">${d.error || 'Keine Commits gefunden'}</span>`;
+      return;
+    }
+    list.innerHTML = d.commits.map(c => `
+      <div class="upd-commit${c.current ? ' current' : ''}">
+        <div class="upd-commit-meta">
+          <code>${c.short}</code>
+          <span class="upd-date">${c.date}</span>
+        </div>
+        <span class="upd-commit-subject" title="${c.subject.replace(/"/g,'&quot;')}">${c.subject}</span>
+        ${c.current
+          ? '<span style="color:var(--text3);font-size:.75rem;flex-shrink:0">aktiv</span>'
+          : `<button class="btn-small" onclick="applyRollback('${c.hash}', \`${c.subject.replace(/`/g,"'")}\`)">Wiederherstellen</button>`
+        }
+      </div>`).join('');
+  } catch(e) {
+    list.innerHTML = '<span style="color:var(--danger);font-size:.8rem">Fehler beim Laden</span>';
+  }
+}
+
+async function applyRollback(hash, subject) {
+  if (!confirm(`Version wiederherstellen?\n\n${subject}\n\nDie Anwendung wird danach neu gestartet.`)) return;
+
+  document.getElementById('upd-history-wrap').classList.add('hidden');
+  _historyVisible = false;
+  document.getElementById('btn-do-update').classList.add('hidden');
+  document.getElementById('btn-recheck').classList.add('hidden');
+  document.getElementById('btn-history').classList.add('hidden');
+  document.getElementById('upd-spinner').classList.remove('hidden');
+  document.getElementById('upd-log-wrap').classList.remove('hidden');
+  document.getElementById('upd-status-text').textContent = 'Rollback läuft…';
+
+  await fetch(`${API}/api/update/rollback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ commit: hash }),
+  });
+  pollUpdateStatus();
+}
+
+async function rebootPi() {
+  document.getElementById('upd-reboot-dialog').classList.add('hidden');
+  document.getElementById('upd-status-text').textContent = 'Pi wird neu gestartet…';
+  try {
+    await fetch(`${API}/api/update/reboot`, { method: 'POST' });
+  } catch(e) {}
+  setTimeout(pollUntilServerBack, 15_000);
+}
+
+async function pollUntilServerBack() {
+  try {
+    const r = await fetch(`${API}/api/update/status`, { signal: AbortSignal.timeout(3000) });
+    if (r.ok) { location.reload(); return; }
+  } catch(e) {}
+  setTimeout(pollUntilServerBack, 3000);
+}
+
 function openUpdate() {
+  // Reset state from previous session
+  document.getElementById('upd-history-wrap').classList.add('hidden');
+  document.getElementById('upd-reboot-dialog').classList.add('hidden');
+  document.getElementById('btn-do-update').classList.remove('hidden');
+  document.getElementById('btn-recheck').classList.remove('hidden');
+  document.getElementById('btn-history').classList.remove('hidden');
+  _historyVisible = false;
   document.getElementById('update-overlay').classList.remove('hidden');
   checkUpdate();
 }
