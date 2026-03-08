@@ -40,6 +40,7 @@ async def start_timelapse(req: StartSessionRequest):
         raise HTTPException(400, "A timelapse session is already running")
     session = state.camera_service.start_session(req.name)
     await state.db.update_settings({"timelapse_active": True})
+    state.timelapse_wake.set()
     return {"session": session}
 
 
@@ -47,6 +48,7 @@ async def start_timelapse(req: StartSessionRequest):
 async def stop_timelapse():
     session = state.camera_service.stop_session()
     await state.db.update_settings({"timelapse_active": False})
+    state.timelapse_wake.set()
     return {"stopped_session": session}
 
 

@@ -6,6 +6,8 @@ and sensor logging as independent asyncio tasks.
 import asyncio
 import logging
 
+import state as _state
+
 logger = logging.getLogger(__name__)
 
 
@@ -153,7 +155,14 @@ class Scheduler:
                     if self._cam.is_capturing:
                         self._cam.stop_session()
 
-                await asyncio.sleep(interval)
+                # Wait for interval OR wake event (whichever comes first)
+                _state.timelapse_wake.clear()
+                try:
+                    await asyncio.wait_for(
+                        _state.timelapse_wake.wait(), timeout=interval
+                    )
+                except asyncio.TimeoutError:
+                    pass
 
             except asyncio.CancelledError:
                 break
