@@ -426,6 +426,13 @@
         <input type="number" id="update-interval-days" min="0" max="365" step="1" value="7" />
       </div>
 
+      <h3>System</h3>
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap">
+        <button class="btn btn-secondary" onclick="systemReboot()">&#8635; Pi neu starten</button>
+        <button class="btn btn-danger"    onclick="systemShutdown()">&#9211; Pi herunterfahren</button>
+      </div>
+      <div id="system-status" class="hint hidden" style="margin-top:.5rem"></div>
+
       <div class="modal-footer">
         <button class="btn" onclick="saveSettings()">Einstellungen speichern</button>
         <span id="settings-saved" class="saved-msg hidden">&#10003; Gespeichert</span>

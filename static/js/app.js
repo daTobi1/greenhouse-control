@@ -865,6 +865,23 @@ async function pollUntilServerBack() {
   setTimeout(pollUntilServerBack, 3000);
 }
 
+async function systemReboot() {
+  if (!confirm('Raspberry Pi jetzt neu starten?\n\nDas Dashboard ist für ca. 30–60 Sekunden nicht erreichbar.')) return;
+  const el = document.getElementById('system-status');
+  el.textContent = 'Pi wird neu gestartet…';
+  el.classList.remove('hidden');
+  try { await fetch(`${API}/api/system/reboot`, { method: 'POST' }); } catch(e) {}
+  setTimeout(pollUntilServerBack, 20_000);
+}
+
+async function systemShutdown() {
+  if (!confirm('Raspberry Pi jetzt herunterfahren?\n\nEr muss danach manuell wieder eingeschaltet werden.')) return;
+  const el = document.getElementById('system-status');
+  el.textContent = 'Pi wird heruntergefahren…';
+  el.classList.remove('hidden');
+  try { await fetch(`${API}/api/system/shutdown`, { method: 'POST' }); } catch(e) {}
+}
+
 function openUpdate() {
   // Reset state from previous session
   document.getElementById('upd-history-wrap').classList.add('hidden');
@@ -884,6 +901,9 @@ function closeUpdate(evt) {
 
 function openSettings() {
   loadSettingsModal();
+  const s = document.getElementById('system-status');
+  s.classList.add('hidden');
+  s.textContent = '';
   document.getElementById('settings-overlay').classList.remove('hidden');
 }
 
