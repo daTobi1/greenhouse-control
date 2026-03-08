@@ -868,6 +868,8 @@ async function pollUntilServerBack() {
 // ----------------------------------------------------------------
 // WiFi management
 // ----------------------------------------------------------------
+let _wifiNetworks = [];
+
 function openWifi() {
   document.getElementById('wifi-overlay').classList.remove('hidden');
   fetchWifiStatus();
@@ -918,33 +920,40 @@ async function fetchWifiStatus() {
   }
 }
 
-async function wifiScan() {
+async function wifiScan(rescan) {
   const btn = document.getElementById('btn-wifi-scan');
+  const rescanBtn = document.getElementById('btn-wifi-rescan');
   const spinner = document.getElementById('wifi-scan-spinner');
   btn.disabled = true;
+  if (rescanBtn) rescanBtn.disabled = true;
   spinner.classList.remove('hidden');
   const list = document.getElementById('wifi-network-list');
   list.innerHTML = '<div class="wifi-empty">Scanne...</div>';
 
   try {
+    // Rescan auslösen wenn gewünscht (kann kurz die Verbindung stören)
+    if (rescan) {
+      spinner.textContent = 'Rescan...';
+      await fetch(`${API}/api/wifi/rescan`, { method: 'POST' });
+    }
+    spinner.textContent = 'Scanne...';
     const r = await fetch(`${API}/api/wifi/scan`);
     const d = await r.json();
     if (!r.ok) {
-      list.innerHTML = `<div class="wifi-empty">Scan fehlgeschlagen: ${d.error || 'Unbekannter Fehler'}</div>`;
+      list.innerHTML = `<div class="wifi-empty">Scan fehlgeschlagen: ${escHtml(d.error || 'Unbekannter Fehler')}</div>`;
       return;
     }
-    const networks = d.networks || [];
-    if (!networks.length) {
+    _wifiNetworks = d.networks || [];
+    if (!_wifiNetworks.length) {
       list.innerHTML = '<div class="wifi-empty">Keine Netzwerke gefunden</div>';
       return;
     }
-    list.innerHTML = networks.map(n => {
+    list.innerHTML = _wifiNetworks.map((n, i) => {
       const bars = signalBars(n.signal);
       const lock = n.secured ? '&#128274;' : '';
-      const ssidEsc = n.ssid.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-      return `<div class="wifi-network-item" onclick="wifiSelectNetwork('${ssidEsc}', ${n.secured})">
+      return `<div class="wifi-network-item" onclick="wifiSelectNetwork(${i})">
         <div class="wifi-bars">${bars}</div>
-        <span class="wifi-ssid">${n.ssid}</span>
+        <span class="wifi-ssid">${escHtml(n.ssid)}</span>
         <span class="wifi-lock">${lock}</span>
         <span class="wifi-signal">${n.signal}%</span>
       </div>`;
@@ -953,8 +962,16 @@ async function wifiScan() {
     list.innerHTML = '<div class="wifi-empty">Scan fehlgeschlagen</div>';
   } finally {
     btn.disabled = false;
+    if (rescanBtn) rescanBtn.disabled = false;
     spinner.classList.add('hidden');
+    spinner.textContent = 'Scanne...';
   }
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
 }
 
 function signalBars(signal) {
@@ -964,11 +981,13 @@ function signalBars(signal) {
   ).join('');
 }
 
-function wifiSelectNetwork(ssid, secured) {
-  document.getElementById('wifi-manual-ssid').value = ssid;
+function wifiSelectNetwork(idx) {
+  const n = _wifiNetworks[idx];
+  if (!n) return;
+  document.getElementById('wifi-manual-ssid').value = n.ssid;
   const passInput = document.getElementById('wifi-manual-pass');
   passInput.value = '';
-  if (secured) {
+  if (n.secured) {
     passInput.focus();
   } else {
     wifiConnectManual();
@@ -1252,7 +1271,6 @@ async function pollAll() {
     fetchSensors(),
     fetchFan(),
     fetchTimelapse(),
-    fetchWifiStatus(),
   ]);
 }
 
@@ -1265,6 +1283,7 @@ async function init() {
   await pollAll();
   await loadHistory();
   refreshPreview();
+  fetchWifiStatus();
 
   // Poll every 10 seconds
   pollTimer = setInterval(pollAll, 10_000);

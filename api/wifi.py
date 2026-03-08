@@ -37,6 +37,26 @@ async def _run(cmd: list[str], timeout: float = 30) -> tuple[int, str, str]:
         return -1, "", f"Befehl nicht gefunden: {cmd[0]}"
 
 
+def _parse_nmcli_line(line: str) -> list[str]:
+    """Parse eine nmcli -t Zeile korrekt (escaped colons \\: beachten)."""
+    parts = []
+    current = []
+    i = 0
+    while i < len(line):
+        if line[i] == '\\' and i + 1 < len(line) and line[i + 1] == ':':
+            current.append(':')
+            i += 2
+        elif line[i] == ':':
+            parts.append(''.join(current))
+            current = []
+            i += 1
+        else:
+            current.append(line[i])
+            i += 1
+    parts.append(''.join(current))
+    return parts
+
+
 @router.get("/status")
 async def wifi_status():
     """Aktueller WLAN-Verbindungsstatus."""
@@ -68,8 +88,8 @@ async def wifi_status():
 
     # Suche aktive Verbindung
     for line in out.strip().splitlines():
-        parts = line.split(":")
-        if len(parts) >= 5 and parts[0].strip().lower() == "ja" or (len(parts) >= 5 and parts[0].strip().lower() == "yes"):
+        parts = _parse_nmcli_line(line)
+        if len(parts) >= 5 and parts[0].strip().lower() in ("ja", "yes"):
             return {
                 "connected": True,
                 "ssid": parts[1],
@@ -101,12 +121,13 @@ async def _get_ip() -> str | None:
 
 @router.get("/scan")
 async def wifi_scan():
-    """Scannt nach verfügbaren WLAN-Netzwerken."""
-    # Rescan auslösen
-    await _run(["nmcli", "dev", "wifi", "rescan"], timeout=10)
-    await asyncio.sleep(2)
-
-    rc, out, err = await _run(["nmcli", "-t", "-f", "SSID,SIGNAL,SECURITY,FREQ", "dev", "wifi", "list"])
+    """Scannt nach verfügbaren WLAN-Netzwerken (nutzt den letzten Scan-Cache)."""
+    # Rescan nur auslösen wenn explizit gewünscht – kein rescan hier,
+    # da das auf dem aktiven Interface die Verbindung stören kann.
+    # nmcli listet den letzten bekannten Scan.
+    rc, out, err = await _run([
+        "nmcli", "-t", "-f", "SSID,SIGNAL,SECURITY,FREQ", "dev", "wifi", "list",
+    ])
 
     if rc != 0:
         return JSONResponse(
@@ -117,8 +138,7 @@ async def wifi_scan():
     networks = []
     seen_ssids = set()
     for line in out.strip().splitlines():
-        # nmcli -t trennt mit ':'
-        parts = line.split(":")
+        parts = _parse_nmcli_line(line)
         if len(parts) < 4:
             continue
         ssid = parts[0].strip()
@@ -139,6 +159,19 @@ async def wifi_scan():
     # Nach Signalstärke sortieren (stärkstes zuerst)
     networks.sort(key=lambda n: n["signal"], reverse=True)
     return {"networks": networks}
+
+
+@router.post("/rescan")
+async def wifi_rescan():
+    """Löst einen aktiven WLAN-Rescan aus (kann kurz die Verbindung stören)."""
+    rc, _, err = await _run(["nmcli", "dev", "wifi", "rescan"], timeout=10)
+    if rc != 0:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "Rescan fehlgeschlagen", "detail": err.strip()},
+        )
+    await asyncio.sleep(3)
+    return {"status": "ok"}
 
 
 @router.post("/connect")

@@ -477,7 +477,8 @@
       <!-- Netzwerk-Scan -->
       <h3>Verfügbare Netzwerke</h3>
       <div class="wifi-scan-bar">
-        <button class="btn btn-secondary" id="btn-wifi-scan" onclick="wifiScan()">Netzwerke suchen</button>
+        <button class="btn btn-secondary" id="btn-wifi-scan" onclick="wifiScan(false)">Netzwerke anzeigen</button>
+        <button class="btn-small" id="btn-wifi-rescan" onclick="wifiScan(true)" data-tooltip="Aktiven Rescan auslösen. Kann die WLAN-Verbindung kurz unterbrechen.">&#8635; Rescan</button>
         <span id="wifi-scan-spinner" class="hidden" style="color:var(--text3);font-size:.82rem">Scanne...</span>
       </div>
       <div id="wifi-network-list" class="wifi-network-list">
@@ -565,6 +566,6 @@
   <div class="lightbox-counter" id="lightbox-counter"></div>
 </div>
 
-<script src="/js/app.js?v=5"></script>
+<script src="/js/app.js?v=6"></script>
 </body>
 </html>

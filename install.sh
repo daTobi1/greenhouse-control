@@ -136,6 +136,38 @@ if getent group video >/dev/null 2>&1; then
   ok "Benutzer '$SERVICE_USER' zur Gruppe 'video' hinzugefügt"
 fi
 
+# Benutzer zur netdev-Gruppe hinzufügen (WLAN-Steuerung)
+if getent group netdev >/dev/null 2>&1; then
+  sudo usermod -a -G netdev "$SERVICE_USER" 2>/dev/null || true
+  ok "Benutzer '$SERVICE_USER' zur Gruppe 'netdev' hinzugefügt"
+fi
+
+# Polkit-Regel für WLAN-Steuerung via NetworkManager
+POLKIT_RULES_DIR="/etc/polkit-1/rules.d"
+POLKIT_LEGACY_DIR="/etc/polkit-1/localauthority/50-local.d"
+if [ -d "$POLKIT_RULES_DIR" ]; then
+  sudo tee "${POLKIT_RULES_DIR}/10-greenhouse-network.rules" > /dev/null <<'RULES'
+polkit.addRule(function(action, subject) {
+    if (action.id.indexOf("org.freedesktop.NetworkManager.") === 0 &&
+        subject.isInGroup("netdev")) {
+        return polkit.Result.YES;
+    }
+});
+RULES
+  ok "Polkit-Regel für WLAN-Steuerung eingerichtet (rules.d)"
+elif [ -d "$(dirname "$POLKIT_LEGACY_DIR")" ]; then
+  sudo mkdir -p "$POLKIT_LEGACY_DIR"
+  sudo tee "${POLKIT_LEGACY_DIR}/10-greenhouse-network.pkla" > /dev/null <<'PKLA'
+[Greenhouse WiFi Management]
+Identity=unix-group:netdev
+Action=org.freedesktop.NetworkManager.*
+ResultAny=yes
+ResultInactive=yes
+ResultActive=yes
+PKLA
+  ok "Polkit-Regel für WLAN-Steuerung eingerichtet (pkla)"
+fi
+
 # ── Repo klonen oder aktualisieren ──────────────────────────
 step "5/7  Repository"
 
