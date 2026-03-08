@@ -11,10 +11,9 @@
 set -euo pipefail
 
 REPO_URL="https://github.com/daTobi1/greenhouse-control.git"
-INSTALL_DIR="${GREENHOUSE_DIR:-$HOME/greenhouse-control}"
 SERVICE_NAME="greenhouse"
 PORT="${GREENHOUSE_PORT:-8080}"
-SERVICE_USER="${USER:-pi}"
+DEFAULT_USER="pi"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
 info()    { echo -e "${BLUE}[INFO]${NC}  $*"; }
@@ -26,6 +25,39 @@ error()   { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 echo ""
 echo "============================================================"
 echo -e "  ${BOLD}Greenhouse Control – Installation${NC}"
+echo "============================================================"
+echo ""
+
+# ── Benutzer abfragen ────────────────────────────────────────
+if [ -n "${GREENHOUSE_USER:-}" ]; then
+  SERVICE_USER="$GREENHOUSE_USER"
+else
+  echo -e "  Unter welchem Benutzer soll der Service laufen?"
+  echo -e "  Standard: ${GREEN}${DEFAULT_USER}${NC}"
+  echo ""
+  INPUT_USER=""
+  for i in $(seq 300 -1 1); do
+    printf "\r  Benutzer [${DEFAULT_USER}]: (automatisch in %3ds) " "$i"
+    if read -rn1 -t1 FIRST_CHAR 2>/dev/null; then
+      # Erstes Zeichen gelesen, Rest der Zeile einlesen
+      printf "%s" "$FIRST_CHAR"
+      read -r REST_CHARS 2>/dev/null || true
+      INPUT_USER="${FIRST_CHAR}${REST_CHARS}"
+      break
+    fi
+  done
+  echo ""
+  SERVICE_USER="${INPUT_USER:-$DEFAULT_USER}"
+fi
+
+# Prüfe ob Benutzer existiert
+if ! id "$SERVICE_USER" &>/dev/null; then
+  error "Benutzer '$SERVICE_USER' existiert nicht auf diesem System."
+fi
+
+INSTALL_DIR="${GREENHOUSE_DIR:-/home/${SERVICE_USER}/greenhouse-control}"
+
+echo ""
 echo "  Zielverzeichnis : $INSTALL_DIR"
 echo "  Port            : $PORT"
 echo "  Benutzer        : $SERVICE_USER"
