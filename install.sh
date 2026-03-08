@@ -38,17 +38,21 @@ else
   echo -e "  Unter welchem Benutzer soll der Service laufen?"
   echo -e "  Standard: ${GREEN}${DEFAULT_USER}${NC}"
   echo ""
-  INPUT_USER=""
+  # Countdown – bei beliebigem Tastendruck abbrechen
+  KEYPRESS=false
   for i in $(seq 300 -1 1); do
-    printf "\r  Benutzer [${DEFAULT_USER}]: (automatisch in %3ds) " "$i"
-    if read -rn1 -t1 FIRST_CHAR <&3 2>/dev/null; then
-      printf "%s" "$FIRST_CHAR"
-      read -r REST_CHARS <&3 2>/dev/null || true
-      INPUT_USER="${FIRST_CHAR}${REST_CHARS}"
+    printf "\r  Drücke eine Taste um den Benutzer einzugeben (automatisch ${GREEN}${DEFAULT_USER}${NC} in %3ds) " "$i"
+    if read -rn1 -t1 _ <&3 2>/dev/null; then
+      KEYPRESS=true
       break
     fi
   done
   echo ""
+  INPUT_USER=""
+  if [ "$KEYPRESS" = true ]; then
+    printf "  Benutzer: "
+    read -r INPUT_USER <&3 2>/dev/null || true
+  fi
   SERVICE_USER="${INPUT_USER:-$DEFAULT_USER}"
 fi
 
