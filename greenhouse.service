@@ -1,6 +1,12 @@
+# Referenz-Datei – die tatsächliche Service-Datei wird vom Installer
+# dynamisch generiert unter /etc/systemd/system/greenhouse.service
+#
+# Pfade und Benutzer werden bei der Installation angepasst.
+
 [Unit]
 Description=Greenhouse Control Dashboard
 After=network.target bluetooth.target
+Wants=bluetooth.target
 
 [Service]
 Type=simple
