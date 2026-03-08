@@ -163,21 +163,47 @@ async def browse_timelapse():
     if not settings.get("timelapse_share_enabled", False):
         raise HTTPException(403, "Network share is disabled")
     output = Path(settings.get("timelapse_path", "timelapse")) / "output"
-    files = sorted(output.glob("*.mp4"), reverse=True) if output.exists() else []
-    items = "".join(
-        f'<li><a href="/api/timelapse/video/{f.stem}">{f.name}</a>'
-        f' &nbsp;<span style="color:#8b949e">({f.stat().st_size // 1024:,} KB)</span></li>'
-        for f in files
-    )
+    IMAGE_EXTS = {".jpg", ".jpeg", ".png"}
+    VIDEO_EXTS = {".mp4"}
+    files = []
+    if output.exists():
+        for f in sorted(output.iterdir(), reverse=True):
+            if f.suffix.lower() in IMAGE_EXTS | VIDEO_EXTS:
+                files.append(f)
+    def _item(f: Path) -> str:
+        is_video = f.suffix.lower() in VIDEO_EXTS
+        url  = f"/api/timelapse/video/{f.stem}" if is_video else f"/api/timelapse/output/{f.name}"
+        tag  = '<span style="color:#79c0ff;font-size:.75rem">Video</span>' if is_video \
+               else '<span style="color:#56d364;font-size:.75rem">Bild</span>'
+        size = f.stat().st_size // 1024
+        return (f'<li>{tag} &nbsp;<a href="{url}">{f.name}</a>'
+                f' &nbsp;<span style="color:#8b949e">({size:,} KB)</span></li>')
+    items = "".join(_item(f) for f in files)
     return f"""<!DOCTYPE html>
 <html lang="de"><head><meta charset="UTF-8">
 <title>Timelapse – Netzwerkfreigabe</title>
 <style>body{{font-family:system-ui,sans-serif;max-width:640px;margin:2rem auto;
 background:#0d1117;color:#e6edf3;padding:1rem}}
 h1{{color:#79c0ff;margin-bottom:1rem}}a{{color:#58a6ff}}
-li{{margin:.5rem 0;font-size:.9rem}}</style></head>
-<body><h1>&#127909; Timelapse-Videos</h1>
-<ul>{items or "<li>Keine Videos vorhanden</li>"}</ul></body></html>"""
+li{{margin:.5rem 0;font-size:.9rem;list-style:none}}</style></head>
+<body><h1>&#127909; Timelapse-Aufnahmen</h1>
+<ul>{items or "<li>Keine Aufnahmen vorhanden</li>"}</ul></body></html>"""
+
+
+@router.get("/output/{filename}")
+async def get_output_file(filename: str):
+    """Serve an image from the timelapse output folder."""
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(400, "Invalid filename")
+    settings = await state.db.get_all_settings()
+    if not settings.get("timelapse_share_enabled", False):
+        raise HTTPException(403, "Network share is disabled")
+    IMAGE_EXTS = {".jpg", ".jpeg", ".png"}
+    path = (Path(settings.get("timelapse_path", "timelapse")) / "output" / filename).resolve()
+    if not path.exists() or path.suffix.lower() not in IMAGE_EXTS:
+        raise HTTPException(404, "File not found")
+    media = "image/jpeg" if path.suffix.lower() in {".jpg", ".jpeg"} else "image/png"
+    return FileResponse(path, media_type=media)
 
 
 @router.get("/preview")
