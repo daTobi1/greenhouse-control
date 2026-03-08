@@ -833,6 +833,81 @@ select {
 }
 
 /* ============================================================
+   WiFi Modal
+============================================================ */
+.wifi-status-box {
+  background: var(--bg3);
+  border-radius: 6px;
+  padding: .7rem .9rem;
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+}
+
+.wifi-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: .85rem;
+}
+
+.wifi-status-label { color: var(--text2); }
+
+.wifi-scan-bar {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  margin-bottom: .5rem;
+}
+
+.wifi-network-list {
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  margin-bottom: .3rem;
+}
+
+.wifi-network-item {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .5rem .7rem;
+  cursor: pointer;
+  font-size: .85rem;
+  color: var(--text2);
+  border-bottom: 1px solid var(--border);
+  transition: background .15s;
+}
+.wifi-network-item:last-child { border-bottom: none; }
+.wifi-network-item:hover { background: var(--bg3); color: var(--text); }
+
+.wifi-network-item .wifi-ssid { flex: 1; font-weight: 500; }
+.wifi-network-item .wifi-signal { color: var(--text3); font-size: .75rem; min-width: 40px; text-align: right; }
+.wifi-network-item .wifi-lock { font-size: .75rem; color: var(--text3); flex-shrink: 0; }
+.wifi-network-item .wifi-bars { flex-shrink: 0; display: flex; align-items: flex-end; gap: 1px; height: 14px; }
+.wifi-network-item .wifi-bars .bar {
+  width: 3px;
+  background: var(--text3);
+  border-radius: 1px;
+}
+.wifi-network-item .wifi-bars .bar.active { background: var(--accent); }
+
+.wifi-empty {
+  padding: 1rem;
+  color: var(--text3);
+  font-size: .82rem;
+  text-align: center;
+}
+
+.status-label.clickable {
+  cursor: pointer;
+  transition: color .15s;
+}
+.status-label.clickable:hover { color: var(--text); }
+
+/* ============================================================
    Toast
 ============================================================ */
 .toast {

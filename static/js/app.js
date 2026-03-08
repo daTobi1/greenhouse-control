@@ -865,6 +865,163 @@ async function pollUntilServerBack() {
   setTimeout(pollUntilServerBack, 3000);
 }
 
+// ----------------------------------------------------------------
+// WiFi management
+// ----------------------------------------------------------------
+function openWifi() {
+  document.getElementById('wifi-overlay').classList.remove('hidden');
+  fetchWifiStatus();
+}
+
+function closeWifi(evt) {
+  if (evt && evt.target !== document.getElementById('wifi-overlay')) return;
+  document.getElementById('wifi-overlay').classList.add('hidden');
+}
+
+async function fetchWifiStatus() {
+  try {
+    const r = await fetch(`${API}/api/wifi/status`);
+    const d = await r.json();
+    const statusEl = document.getElementById('wifi-conn-status');
+    const ssidEl   = document.getElementById('wifi-conn-ssid');
+    const signalEl = document.getElementById('wifi-conn-signal');
+    const ipEl     = document.getElementById('wifi-conn-ip');
+    const dot      = document.getElementById('dot-wifi');
+
+    if (d.mock_mode) {
+      statusEl.textContent = 'Nicht verfügbar (Mock)';
+      statusEl.style.color = 'var(--text3)';
+      ssidEl.textContent = '--';
+      signalEl.textContent = '--';
+      ipEl.textContent = '--';
+      dot.className = 'status-dot';
+      return;
+    }
+
+    if (d.connected) {
+      statusEl.textContent = 'Verbunden';
+      statusEl.style.color = 'var(--accent)';
+      ssidEl.textContent = d.ssid || '--';
+      signalEl.textContent = d.signal != null ? d.signal + '%' : '--';
+      ipEl.textContent = d.ip || '--';
+      dot.className = 'status-dot ok';
+    } else {
+      statusEl.textContent = 'Nicht verbunden';
+      statusEl.style.color = 'var(--danger)';
+      ssidEl.textContent = '--';
+      signalEl.textContent = '--';
+      ipEl.textContent = d.ip || '--';
+      dot.className = 'status-dot error';
+    }
+  } catch(e) {
+    document.getElementById('dot-wifi').className = 'status-dot';
+  }
+}
+
+async function wifiScan() {
+  const btn = document.getElementById('btn-wifi-scan');
+  const spinner = document.getElementById('wifi-scan-spinner');
+  btn.disabled = true;
+  spinner.classList.remove('hidden');
+  const list = document.getElementById('wifi-network-list');
+  list.innerHTML = '<div class="wifi-empty">Scanne...</div>';
+
+  try {
+    const r = await fetch(`${API}/api/wifi/scan`);
+    const d = await r.json();
+    if (!r.ok) {
+      list.innerHTML = `<div class="wifi-empty">Scan fehlgeschlagen: ${d.error || 'Unbekannter Fehler'}</div>`;
+      return;
+    }
+    const networks = d.networks || [];
+    if (!networks.length) {
+      list.innerHTML = '<div class="wifi-empty">Keine Netzwerke gefunden</div>';
+      return;
+    }
+    list.innerHTML = networks.map(n => {
+      const bars = signalBars(n.signal);
+      const lock = n.secured ? '&#128274;' : '';
+      const ssidEsc = n.ssid.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      return `<div class="wifi-network-item" onclick="wifiSelectNetwork('${ssidEsc}', ${n.secured})">
+        <div class="wifi-bars">${bars}</div>
+        <span class="wifi-ssid">${n.ssid}</span>
+        <span class="wifi-lock">${lock}</span>
+        <span class="wifi-signal">${n.signal}%</span>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    list.innerHTML = '<div class="wifi-empty">Scan fehlgeschlagen</div>';
+  } finally {
+    btn.disabled = false;
+    spinner.classList.add('hidden');
+  }
+}
+
+function signalBars(signal) {
+  const count = signal > 75 ? 4 : signal > 50 ? 3 : signal > 25 ? 2 : 1;
+  return [4, 7, 10, 13].map((h, i) =>
+    `<div class="bar${i < count ? ' active' : ''}" style="height:${h}px"></div>`
+  ).join('');
+}
+
+function wifiSelectNetwork(ssid, secured) {
+  document.getElementById('wifi-manual-ssid').value = ssid;
+  const passInput = document.getElementById('wifi-manual-pass');
+  passInput.value = '';
+  if (secured) {
+    passInput.focus();
+  } else {
+    wifiConnectManual();
+  }
+}
+
+function toggleWifiPass() {
+  const inp = document.getElementById('wifi-manual-pass');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+async function wifiConnectManual() {
+  const ssid = document.getElementById('wifi-manual-ssid').value.trim();
+  const pass = document.getElementById('wifi-manual-pass').value;
+  const statusEl = document.getElementById('wifi-connect-status');
+
+  if (!ssid) {
+    showToast('Bitte SSID eingeben');
+    return;
+  }
+
+  const btn = document.getElementById('btn-wifi-connect');
+  btn.disabled = true;
+  btn.textContent = 'Verbinde...';
+  statusEl.classList.remove('hidden');
+  statusEl.textContent = 'Verbindung wird hergestellt...';
+  statusEl.style.color = 'var(--text3)';
+
+  try {
+    const r = await fetch(`${API}/api/wifi/connect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ssid, password: pass }),
+    });
+    const d = await r.json();
+    if (r.ok && d.connected) {
+      statusEl.textContent = `Verbunden mit "${ssid}" (IP: ${d.ip || '...'})`;
+      statusEl.style.color = 'var(--accent)';
+      showToast(`WLAN verbunden: ${ssid}`);
+      fetchWifiStatus();
+    } else {
+      statusEl.textContent = d.detail || d.error || 'Verbindung fehlgeschlagen';
+      statusEl.style.color = 'var(--danger)';
+    }
+  } catch(e) {
+    statusEl.textContent = 'Verbindungsfehler';
+    statusEl.style.color = 'var(--danger)';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Verbinden';
+  }
+}
+
 async function systemReboot() {
   if (!confirm('Raspberry Pi jetzt neu starten?\n\nDas Dashboard ist für ca. 30–60 Sekunden nicht erreichbar.')) return;
   const el = document.getElementById('system-status');
@@ -1095,6 +1252,7 @@ async function pollAll() {
     fetchSensors(),
     fetchFan(),
     fetchTimelapse(),
+    fetchWifiStatus(),
   ]);
 }
 

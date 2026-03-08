@@ -22,6 +22,8 @@
     <span class="status-label" id="lbl-ble">BLE</span>
     <span class="status-dot" id="dot-cam" title="Kamera"></span>
     <span class="status-label" id="lbl-cam">Kamera</span>
+    <span class="status-dot" id="dot-wifi" title="WLAN"></span>
+    <span class="status-label clickable" id="lbl-wifi" onclick="openWifi()">WLAN</span>
     <span id="clock" class="clock"></span>
     <button class="btn-small" onclick="openUpdate()">Auf Updates prüfen</button>
     <span id="update-badge" class="update-badge hidden">Neu</span>
@@ -441,6 +443,67 @@
   </div>
 </div>
 
+<!-- ================================================================
+     WIFI MODAL
+================================================================ -->
+<div id="wifi-overlay" class="overlay hidden" onclick="closeWifi(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>WLAN-Netzwerk</h2>
+      <button class="btn-icon" onclick="closeWifi()">&#10005;</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Aktueller Status -->
+      <div class="wifi-status-box" id="wifi-status-box">
+        <div class="wifi-status-row">
+          <span class="wifi-status-label">Status</span>
+          <span id="wifi-conn-status">--</span>
+        </div>
+        <div class="wifi-status-row">
+          <span class="wifi-status-label">Netzwerk</span>
+          <span id="wifi-conn-ssid">--</span>
+        </div>
+        <div class="wifi-status-row">
+          <span class="wifi-status-label">Signal</span>
+          <span id="wifi-conn-signal">--</span>
+        </div>
+        <div class="wifi-status-row">
+          <span class="wifi-status-label">IP-Adresse</span>
+          <span id="wifi-conn-ip">--</span>
+        </div>
+      </div>
+
+      <!-- Netzwerk-Scan -->
+      <h3>Verfügbare Netzwerke</h3>
+      <div class="wifi-scan-bar">
+        <button class="btn btn-secondary" id="btn-wifi-scan" onclick="wifiScan()">Netzwerke suchen</button>
+        <span id="wifi-scan-spinner" class="hidden" style="color:var(--text3);font-size:.82rem">Scanne...</span>
+      </div>
+      <div id="wifi-network-list" class="wifi-network-list">
+        <div class="wifi-empty">Noch nicht gescannt</div>
+      </div>
+
+      <!-- Manuelle Eingabe -->
+      <h3>Manuelle Verbindung</h3>
+      <div class="control-row">
+        <label>SSID</label>
+        <input type="text" id="wifi-manual-ssid" placeholder="Netzwerkname" style="width:180px" />
+      </div>
+      <div class="control-row">
+        <label>Passwort</label>
+        <div class="input-group" style="flex:none">
+          <input type="password" id="wifi-manual-pass" placeholder="Netzwerkschlüssel" style="width:152px;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.28rem .5rem;font-size:.85rem" />
+          <button class="btn-small" onclick="toggleWifiPass()" title="Passwort anzeigen">&#128065;</button>
+        </div>
+      </div>
+      <button class="btn" id="btn-wifi-connect" onclick="wifiConnectManual()" style="margin-top:.5rem">Verbinden</button>
+      <span id="wifi-connect-status" class="hidden hint" style="margin-top:.5rem;display:block"></span>
+
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="toast hidden"></div>
 
 <!-- ================================================================
@@ -502,6 +565,6 @@
   <div class="lightbox-counter" id="lightbox-counter"></div>
 </div>
 
-<script src="/js/app.js?v=4"></script>
+<script src="/js/app.js?v=5"></script>
 </body>
 </html>
