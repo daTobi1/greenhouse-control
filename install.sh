@@ -36,12 +36,16 @@ else
   echo -e "  Standard: ${GREEN}${DEFAULT_USER}${NC}"
   echo ""
   INPUT_USER=""
+  if [ -t 0 ]; then
+    TTY_IN="/dev/stdin"
+  else
+    TTY_IN="/dev/tty"
+  fi
   for i in $(seq 300 -1 1); do
     printf "\r  Benutzer [${DEFAULT_USER}]: (automatisch in %3ds) " "$i"
-    if read -rn1 -t1 FIRST_CHAR 2>/dev/null; then
-      # Erstes Zeichen gelesen, Rest der Zeile einlesen
+    if read -rn1 -t1 FIRST_CHAR < "$TTY_IN" 2>/dev/null; then
       printf "%s" "$FIRST_CHAR"
-      read -r REST_CHARS 2>/dev/null || true
+      read -r REST_CHARS < "$TTY_IN" 2>/dev/null || true
       INPUT_USER="${FIRST_CHAR}${REST_CHARS}"
       break
     fi
@@ -294,9 +298,14 @@ else
   echo -e "  ${YELLOW}[n]${NC} Nein, nur manuell starten"
   echo ""
   AUTOSTART_CHOICE=""
+  if [ -t 0 ]; then
+    AS_TTY="/dev/stdin"
+  else
+    AS_TTY="/dev/tty"
+  fi
   for i in $(seq 60 -1 1); do
     printf "\r  Auswahl [J/n] (automatisch Ja in %2ds): " "$i"
-    if read -rn1 -t1 AUTOSTART_CHOICE 2>/dev/null; then
+    if read -rn1 -t1 AUTOSTART_CHOICE < "$AS_TTY" 2>/dev/null; then
       echo ""
       break
     fi
