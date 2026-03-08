@@ -1,10 +1,13 @@
 import json
 import logging
+import time
 from datetime import datetime
 
 import aiosqlite
 
 logger = logging.getLogger(__name__)
+
+_SETTINGS_CACHE_TTL = 5  # Sekunden
 
 DEFAULT_SETTINGS = {
     "inside_sensor_mac": "",
@@ -42,6 +45,8 @@ class Database:
     def __init__(self, path: str):
         self._path = path
         self._conn: aiosqlite.Connection | None = None
+        self._settings_cache: dict | None = None
+        self._settings_cache_ts: float = 0
 
     async def init(self):
         self._conn = await aiosqlite.connect(self._path)
@@ -136,9 +141,15 @@ class Database:
     # --- Settings ---
 
     async def get_all_settings(self) -> dict:
+        now = time.monotonic()
+        if self._settings_cache is not None and (now - self._settings_cache_ts) < _SETTINGS_CACHE_TTL:
+            return dict(self._settings_cache)
         async with self._conn.execute("SELECT key, value FROM settings") as cur:
             rows = await cur.fetchall()
-            return {r["key"]: json.loads(r["value"]) for r in rows}
+            result = {r["key"]: json.loads(r["value"]) for r in rows}
+        self._settings_cache = result
+        self._settings_cache_ts = now
+        return dict(result)
 
     async def get_setting(self, key: str, default=None):
         async with self._conn.execute(
@@ -154,6 +165,7 @@ class Database:
                 (key, json.dumps(value)),
             )
         await self._conn.commit()
+        self._settings_cache = None  # Cache invalidieren
 
     # --- Fan events ---
 

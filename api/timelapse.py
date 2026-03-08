@@ -52,12 +52,14 @@ async def stop_timelapse():
 
 @router.get("/sessions")
 async def list_sessions():
-    return {"sessions": state.camera_service.get_sessions()}
+    sessions = await asyncio.to_thread(state.camera_service.get_sessions)
+    return {"sessions": sessions}
 
 
 @router.post("/compile/{session}")
 async def compile_session(session: str, background_tasks: BackgroundTasks):
-    sessions = {s["name"]: s for s in state.camera_service.get_sessions()}
+    all_sessions = await asyncio.to_thread(state.camera_service.get_sessions)
+    sessions = {s["name"]: s for s in all_sessions}
     if session not in sessions:
         raise HTTPException(404, "Session not found")
     if _compile_jobs.get(session) == "running":
@@ -79,7 +81,8 @@ async def compile_session(session: str, background_tasks: BackgroundTasks):
 @router.get("/compile/{session}/status")
 async def compile_status(session: str):
     status = _compile_jobs.get(session, "not_started")
-    sessions = {s["name"]: s for s in state.camera_service.get_sessions()}
+    all_sessions = await asyncio.to_thread(state.camera_service.get_sessions)
+    sessions = {s["name"]: s for s in all_sessions}
     has_video = sessions.get(session, {}).get("has_video", False)
     return {"session": session, "status": status, "has_video": has_video}
 
@@ -90,15 +93,20 @@ async def list_session_files(session: str):
     session_dir = state.camera_service.frames_dir / session
     if not session_dir.exists():
         raise HTTPException(404, "Session not found")
-    files = []
-    for f in sorted(session_dir.iterdir()):
-        if f.suffix in (".jpg", ".mp4"):
-            files.append({
-                "name":  f.name,
-                "url":   f"/api/timelapse/sessions/{session}/file/{f.name}",
-                "type":  "video" if f.suffix == ".mp4" else "image",
-                "size":  f.stat().st_size,
-            })
+
+    def _list_files():
+        files = []
+        for f in sorted(session_dir.iterdir()):
+            if f.suffix in (".jpg", ".mp4"):
+                files.append({
+                    "name":  f.name,
+                    "url":   f"/api/timelapse/sessions/{session}/file/{f.name}",
+                    "type":  "video" if f.suffix == ".mp4" else "image",
+                    "size":  f.stat().st_size,
+                })
+        return files
+
+    files = await asyncio.to_thread(_list_files)
     return {"session": session, "files": files}
 
 
@@ -209,7 +217,7 @@ async def get_output_file(filename: str):
 @router.get("/preview")
 async def camera_preview():
     """Return a live JPEG preview from the camera."""
-    data = state.camera_service.capture_preview()
+    data = await asyncio.to_thread(state.camera_service.capture_preview)
     if data is None:
         raise HTTPException(503, "Camera not available")
     return Response(content=data, media_type="image/jpeg")

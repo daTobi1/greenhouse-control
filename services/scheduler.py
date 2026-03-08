@@ -68,6 +68,7 @@ class Scheduler:
 
     async def _fan_loop(self):
         configured_pin = None
+        last_logged_speed = None
         while self._running:
             try:
                 settings = await self._db.get_all_settings()
@@ -81,16 +82,24 @@ class Scheduler:
                 manual_override = settings.get("fan_manual_override", False)
 
                 if manual_override:
-                    manual_speed = float(settings.get("fan_manual_speed", 0.0))
-                    self._fan.set_speed(manual_speed)
-                    await self._db.log_fan_event(manual_speed, "manual")
+                    speed = float(settings.get("fan_manual_speed", 0.0))
+                    self._fan.set_speed(speed)
+                    reason = "manual"
                 else:
                     inside  = self._sb.get_sensor_data("inside")
                     outside = self._sb.get_sensor_data("outside")
                     if inside:
                         speed = self._fan.calculate_speed(inside, outside, settings)
                         self._fan.set_speed(speed)
-                        await self._db.log_fan_event(speed, "auto")
+                        reason = "auto"
+                    else:
+                        speed = None
+                        reason = None
+
+                # Nur loggen wenn sich die Geschwindigkeit geändert hat
+                if speed is not None and speed != last_logged_speed:
+                    await self._db.log_fan_event(speed, reason)
+                    last_logged_speed = speed
 
                 await asyncio.sleep(interval)
 
@@ -105,6 +114,7 @@ class Scheduler:
     # ------------------------------------------------------------------
 
     async def _timelapse_loop(self):
+        last_cam_config = None
         while self._running:
             try:
                 settings     = await self._db.get_all_settings()
@@ -118,13 +128,17 @@ class Scheduler:
                 clip_duration= float(settings.get("clip_duration") or 5)
                 clip_fps     = int(settings.get("clip_fps") or 10)
 
-                self._cam.setup(
-                    frames_dir=f"{tl_path}/frames",
-                    output_dir=f"{tl_path}/output",
-                    camera_index=cam_idx,
-                    capture_width=cap_w,
-                    capture_height=cap_h,
-                )
+                # Setup nur bei Konfigurationsänderung
+                cam_config = (tl_path, cam_idx, cap_w, cap_h)
+                if cam_config != last_cam_config:
+                    self._cam.setup(
+                        frames_dir=f"{tl_path}/frames",
+                        output_dir=f"{tl_path}/output",
+                        camera_index=cam_idx,
+                        capture_width=cap_w,
+                        capture_height=cap_h,
+                    )
+                    last_cam_config = cam_config
 
                 if active:
                     if not self._cam.is_capturing:
