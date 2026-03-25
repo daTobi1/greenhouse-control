@@ -12,7 +12,7 @@ set -euo pipefail
 
 REPO_URL="https://github.com/daTobi1/greenhouse-control.git"
 SERVICE_NAME="greenhouse"
-PORT="${GREENHOUSE_PORT:-8080}"
+PORT="${GREENHOUSE_PORT:-80}"
 DEFAULT_USER="pi"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
@@ -196,9 +196,17 @@ ${SERVICE_USER} ALL=(ALL) NOPASSWD: /sbin/reboot
 ${SERVICE_USER} ALL=(ALL) NOPASSWD: /sbin/shutdown
 ${SERVICE_USER} ALL=(ALL) NOPASSWD: /bin/systemctl restart greenhouse
 ${SERVICE_USER} ALL=(ALL) NOPASSWD: /bin/systemctl restart greenhouse.service
+${SERVICE_USER} ALL=(ALL) NOPASSWD: /usr/bin/tailscale up *, /usr/bin/tailscale up, /usr/bin/tailscale down
 EOF
 sudo chmod 440 "$SUDOERS_FILE"
-ok "sudo-Rechte für Reboot/Shutdown/Restart eingerichtet"
+ok "sudo-Rechte für Reboot/Shutdown/Restart/Tailscale eingerichtet"
+
+# Port 80 ohne Root erlauben
+if ! grep -q 'ip_unprivileged_port_start=80' /etc/sysctl.d/80-unprivileged-port.conf 2>/dev/null; then
+  echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee /etc/sysctl.d/80-unprivileged-port.conf > /dev/null
+  sudo sysctl --system > /dev/null 2>&1
+  ok "Port 80 für unprivilegierte Prozesse freigegeben"
+fi
 
 # Polkit-Regel für WLAN-Steuerung via NetworkManager
 POLKIT_RULES_DIR="/etc/polkit-1/rules.d"

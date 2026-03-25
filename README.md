@@ -16,8 +16,7 @@ Das Script erkennt automatisch ob es auf einem Raspberry Pi läuft, installiert 
 
 Dashboard aufrufen:
 ```
-http://<Pi-IP-Adresse>:8080
-```
+http://<Pi-IP-Adresse>```
 
 ### Deinstallation
 
@@ -79,7 +78,7 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-uvicorn main:app --host 0.0.0.0 --port 8080 --reload
+uvicorn main:app --host 0.0.0.0 --port 80 --reload
 ```
 
 Auf Windows/Mac läuft die App im **Mock-Mode** – GPIO und Kamera werden simuliert, alle API-Endpunkte sind voll funktionsfähig.

@@ -1110,7 +1110,7 @@ function togglePwaGuide() {
       ip = location.hostname;
     }
     if (ip && link) {
-      const url = `http://${ip}:8080`;
+      const url = `http://${ip}`;
       link.href = url;
       link.textContent = url;
     }
