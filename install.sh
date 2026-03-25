@@ -355,6 +355,7 @@ Type=simple
 User=${SERVICE_USER}
 WorkingDirectory=${INSTALL_DIR}
 ExecStart=${INSTALL_DIR}/venv/bin/uvicorn main:app --host 0.0.0.0 --port ${PORT}
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 Restart=on-failure
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1

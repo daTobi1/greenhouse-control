@@ -148,7 +148,7 @@ greenhouse-control/
 | POST | `/api/tailscale/up` | Tailscale einschalten |
 | POST | `/api/tailscale/down` | Tailscale ausschalten |
 
-Interaktive Dokumentation: `http://<Pi-IP>:8080/docs`
+Interaktive Dokumentation: `http://<Pi-IP>/docs`
 
 ---
 
