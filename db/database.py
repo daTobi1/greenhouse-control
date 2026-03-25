@@ -30,6 +30,7 @@ DEFAULT_SETTINGS = {
     "fan_deadband": 0.1,             # hysteresis: min raw speed (0..1) to start fan
     "fan_manual_override": False,
     "fan_manual_speed": 0.0,
+    "fan_min_temperature": 5.0,          # frost protection: fan off below this inside temp
     "update_check_interval_days": 7,  # 0 = deaktiviert
     "timelapse_path": "timelapse",
     "timelapse_share_enabled": False,

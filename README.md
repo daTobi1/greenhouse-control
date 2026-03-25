@@ -33,7 +33,7 @@ Fragt vor dem Löschen des Verzeichnisses (inkl. Datenbank und Timelapse-Aufnahm
 
 - **Web-Dashboard** – erreichbar im lokalen Netzwerk oder per VPN (Tailscale, WireGuard)
 - **Lüfterregelung** – proportionale PWM-Regelung via MOSFET, Abluft-Prinzip
-- **SwitchBot Integration** – direkte Bluetooth-Verbindung, kein Cloud-API nötig
+- **SwitchBot Integration** – direkte Bluetooth-Verbindung, kein Cloud-API nötig (Meter, Meter Plus, Outdoor Meter / WoIOSensor)
 - **Zwei Sensoren** – frei konfigurierbar welcher innen/außen ist
 - **Regelungsarten** – Temperatur, Feuchtigkeit oder kombiniert
 - **Trend-Indikatoren** – zeigen ob Werte steigen, fallen oder stabil sind
@@ -154,12 +154,14 @@ Alle Einstellungen über das Zahnrad-Symbol im Dashboard.
 | `outside_sensor_mac` | – | MAC-Adresse Außen-Sensor |
 | `target_temperature` | 25.0 °C | Ziel-Temperatur |
 | `target_humidity` | 65 % | Ziel-Feuchtigkeit |
-| `control_mode` | combined | `temperature` / `humidity` / `combined` |
+| `control_mode` | combined_or | `temperature` / `humidity` / `combined_or` / `combined_and` |
 | `fan_gpio_pin` | 18 | GPIO-Pin (BCM) |
 | `fan_min_speed` | 0.2 | Mindest-Drehzahl (0–1) |
 | `fan_max_speed` | 1.0 | Maximale Drehzahl (0–1) |
 | `temp_control_range` | 5.0 °C | Temperaturdifferenz für volle Drehzahl |
 | `humidity_control_range` | 20 % | Feuchtigkeitsdifferenz für volle Drehzahl |
+| `fan_deadband` | 0.1 | Totzone / Hysterese (0–1) |
+| `fan_min_temperature` | 5.0 °C | Frostschutz: Lüfter aus unter diesem Wert |
 | `ble_scan_interval` | 30 s | Pause zwischen BLE-Scans |
 | `timelapse_interval` | 3600 s | Abstand zwischen Timelapse-Frames |
 | `timelapse_fps` | 25 | Bildrate des kompilierten Videos |
@@ -185,6 +187,7 @@ Der Lüfter arbeitet im **Abluft-Prinzip** (schiebt Luft aus dem Gewächshaus he
   - Feuchtigkeit: Außen trockener als innen **und** innen über Ziel-Feuchtigkeit
 - Drehzahl skaliert proportional zwischen `fan_min` und `fan_max`
 - Unter Mindest-Drehzahl wird der Lüfter komplett ausgeschaltet
+- **Frostschutz**: Lüfter wird blockiert wenn die Innentemperatur unter `fan_min_temperature` fällt (Standard: 5 °C)
 
 ---
 

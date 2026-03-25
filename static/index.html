@@ -42,9 +42,9 @@
       <div class="card-label">Innen &mdash; Temperatur</div>
       <div class="value-row">
         <div class="card-value" id="in-temp">--</div>
+        <span class="card-unit">°C</span>
         <span class="trend-badge" id="trend-in-temp"></span>
       </div>
-      <div class="card-unit">°C</div>
       <div class="card-meta">
         <span id="in-temp-bat">Batterie: --</span>
         <span id="in-temp-ts">--</span>
@@ -54,9 +54,9 @@
       <div class="card-label">Innen &mdash; Feuchtigkeit</div>
       <div class="value-row">
         <div class="card-value" id="in-hum">--</div>
+        <span class="card-unit">%</span>
         <span class="trend-badge" id="trend-in-hum"></span>
       </div>
-      <div class="card-unit">%</div>
       <div class="card-meta">
         <span></span>
         <span id="in-hum-ts">--</span>
@@ -66,9 +66,9 @@
       <div class="card-label">Außen &mdash; Temperatur</div>
       <div class="value-row">
         <div class="card-value" id="out-temp">--</div>
+        <span class="card-unit">°C</span>
         <span class="trend-badge" id="trend-out-temp"></span>
       </div>
-      <div class="card-unit">°C</div>
       <div class="card-meta">
         <span id="out-temp-bat">Batterie: --</span>
         <span id="out-temp-ts">--</span>
@@ -78,9 +78,9 @@
       <div class="card-label">Außen &mdash; Feuchtigkeit</div>
       <div class="value-row">
         <div class="card-value" id="out-hum">--</div>
+        <span class="card-unit">%</span>
         <span class="trend-badge" id="trend-out-hum"></span>
       </div>
-      <div class="card-unit">%</div>
       <div class="card-meta">
         <span></span>
         <span id="out-hum-ts">--</span>
@@ -175,6 +175,14 @@
         <div class="input-group">
           <input type="text" inputmode="decimal" id="fan-deadband" placeholder="10" />
           <span class="unit">%</span>
+        </div>
+      </div>
+
+      <div class="control-row" data-tooltip="Frostschutz: Der Lüfter wird komplett abgeschaltet, wenn die Innentemperatur unter diesen Wert fällt.">
+        <label>Min. Temperatur</label>
+        <div class="input-group">
+          <input type="text" inputmode="decimal" id="fan-min-temp" placeholder="5,0" />
+          <span class="unit">°C</span>
         </div>
       </div>
 

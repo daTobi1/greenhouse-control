@@ -109,11 +109,17 @@ class FanController:
         fan_max          = settings.get("fan_max_speed", 1.0)
         deadband         = settings.get("fan_deadband", 0.1)
         mode             = settings.get("control_mode", "combined")
+        min_temp         = settings.get("fan_min_temperature", 5.0)
 
         if not inside:
             return 0.0
 
         i_temp = inside.get("temperature", 0.0)
+
+        # Frost protection: stop fan if inside temperature is too low
+        if i_temp < min_temp:
+            self._is_active = False
+            return 0.0
         i_hum  = inside.get("humidity", 0.0)
         o_temp = outside.get("temperature", 9999.0) if outside else 9999.0
         o_hum  = outside.get("humidity", 9999.0)   if outside else 9999.0

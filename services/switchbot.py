@@ -20,6 +20,7 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 SWITCHBOT_SVC_UUID = "0000fd3d-0000-1000-8000-00805f9b34fb"
+SWITCHBOT_MFR_ID = 2409  # 0x0969
 
 try:
     from bleak import BleakScanner
@@ -44,6 +45,44 @@ def _parse_service_data(data: bytes) -> dict | None:
     temperature = round(temp_int + temp_dec * 0.1, 1)
     if not temp_positive:
         temperature = -temperature
+
+    return {
+        "temperature": temperature,
+        "humidity": humidity,
+        "battery": battery,
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+def _parse_manufacturer_data(mfr_data: bytes, svc_data: bytes | None = None) -> dict | None:
+    """Parse SwitchBot WoIOSensor (Outdoor Meter) from manufacturer data.
+
+    Manufacturer data layout (company 0x0969 / 2409):
+      [0-5]  MAC address
+      [6-8]  flags / battery
+      [9]    temperature: bit7 = sign (1=positive), bits6-0 = integer
+      [10]   humidity (bits6-0)
+      [11]   reserved
+    """
+    if len(mfr_data) < 11:
+        return None
+
+    temp_byte = mfr_data[9]
+    hum_byte = mfr_data[10]
+
+    temp_positive = bool(temp_byte & 0x80)
+    temp_int = temp_byte & 0x7F
+    humidity = hum_byte & 0x7F
+
+    temperature = float(temp_int)
+    if not temp_positive:
+        temperature = -temperature
+
+    # Battery from service data (more reliable) or manufacturer data
+    if svc_data and len(svc_data) >= 3:
+        battery = svc_data[2] & 0x7F
+    else:
+        battery = mfr_data[8] & 0x7F
 
     return {
         "temperature": temperature,
@@ -84,7 +123,8 @@ class SwitchBotService:
         # Discovery mode: log all SwitchBot devices
         if not self._known:
             raw = _extract_service_data(adv_data)
-            if raw is not None:
+            mfr = (adv_data.manufacturer_data or {}).get(SWITCHBOT_MFR_ID)
+            if raw is not None or mfr is not None:
                 logger.info(
                     f"SwitchBot discovered: {mac}  name={device.name}  rssi={adv_data.rssi}"
                 )
@@ -93,11 +133,19 @@ class SwitchBotService:
         if mac not in self._known:
             return
 
-        raw = _extract_service_data(adv_data)
-        if raw is None:
-            return
+        svc_raw = _extract_service_data(adv_data)
+        parsed = None
 
-        parsed = _parse_service_data(raw)
+        # Try standard service data parsing (6+ bytes, e.g. indoor meters)
+        if svc_raw and len(svc_raw) >= 6:
+            parsed = _parse_service_data(svc_raw)
+
+        # Fallback: manufacturer data (WoIOSensor / Outdoor Meter)
+        if parsed is None:
+            mfr_raw = (adv_data.manufacturer_data or {}).get(SWITCHBOT_MFR_ID)
+            if mfr_raw:
+                parsed = _parse_manufacturer_data(mfr_raw, svc_raw)
+
         if parsed:
             role = self._known[mac]
             self._sensor_data[role] = {**parsed, "mac": mac, "rssi": adv_data.rssi}

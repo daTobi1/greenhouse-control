@@ -312,6 +312,7 @@ async function loadControlSettings() {
     document.getElementById('fan-min').value       = formatDE((s.fan_min_speed ?? 0.2) * 100, 0);
     document.getElementById('fan-max').value       = formatDE((s.fan_max_speed ?? 1.0) * 100, 0);
     document.getElementById('fan-deadband').value  = formatDE((s.fan_deadband ?? 0.1) * 100, 0);
+    document.getElementById('fan-min-temp').value  = formatDE(s.fan_min_temperature ?? 5, 1);
   } catch(e) {}
 }
 
@@ -325,6 +326,7 @@ async function saveControlSettings() {
     fan_min_speed:           parseDE(document.getElementById('fan-min').value) / 100,
     fan_max_speed:           parseDE(document.getElementById('fan-max').value) / 100,
     fan_deadband:            parseDE(document.getElementById('fan-deadband').value) / 100,
+    fan_min_temperature:     parseDE(document.getElementById('fan-min-temp').value),
   };
   await fetch(`${API}/api/settings`, {
     method: 'PUT',

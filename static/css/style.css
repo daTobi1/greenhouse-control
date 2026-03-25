@@ -193,7 +193,7 @@ h1 { font-size: 1.1rem; font-weight: 600; color: var(--accent2); }
 .card-unit {
   font-size: 1rem;
   color: var(--text3);
-  margin-top: .2rem;
+  white-space: nowrap;
 }
 
 .card-meta {
