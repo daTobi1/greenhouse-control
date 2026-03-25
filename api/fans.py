@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 import state
@@ -43,7 +43,18 @@ async def set_auto():
 
 
 @router.get("/history")
-async def get_history(hours: int = 24):
-    """Fan speed history."""
-    events = await state.db.get_fan_events(hours)
+async def get_history(
+    hours: int = Query(default=24, ge=1, le=720),
+    max_points: int = Query(default=0, ge=0, le=2000),
+    from_ts: str = Query(default=None),
+    to_ts: str = Query(default=None),
+):
+    """Fan speed history (up to 30 days)."""
+    if from_ts and to_ts:
+        events = await state.db.get_fan_events_range(from_ts, to_ts)
+    else:
+        events = await state.db.get_fan_events(hours)
+    if max_points > 0 and len(events) > max_points:
+        step = len(events) / max_points
+        events = [events[int(i * step)] for i in range(max_points)]
     return {"events": events}

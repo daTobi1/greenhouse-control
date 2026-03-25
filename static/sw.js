@@ -1,9 +1,11 @@
 // Service Worker – enables PWA install and offline shell caching
-const CACHE_NAME = 'greenhouse-v1';
+const CACHE_NAME = 'greenhouse-v2';
 const SHELL_ASSETS = [
   '/',
   '/css/style.css',
   '/js/app.js',
+  '/js/trend.js',
+  '/trend.html',
   '/manifest.json',
 ];
 

@@ -130,6 +130,19 @@ class Database:
             rows = await cur.fetchall()
             return [dict(r) for r in rows]
 
+    async def get_readings_range(self, role: str, from_ts: str, to_ts: str) -> list[dict]:
+        async with self._conn.execute(
+            """
+            SELECT timestamp, temperature, humidity, battery
+            FROM sensor_readings
+            WHERE role = ? AND timestamp >= ? AND timestamp <= ?
+            ORDER BY timestamp ASC
+            """,
+            (role, from_ts, to_ts),
+        ) as cur:
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
+
     async def get_last_readings(self, role: str, limit: int = 1) -> list[dict]:
         async with self._conn.execute(
             "SELECT timestamp, temperature, humidity, battery "
@@ -186,6 +199,19 @@ class Database:
             ORDER BY timestamp ASC
             """,
             (f"-{hours}",),
+        ) as cur:
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
+
+    async def get_fan_events_range(self, from_ts: str, to_ts: str) -> list[dict]:
+        async with self._conn.execute(
+            """
+            SELECT timestamp, speed, reason
+            FROM fan_events
+            WHERE timestamp >= ? AND timestamp <= ?
+            ORDER BY timestamp ASC
+            """,
+            (from_ts, to_ts),
         ) as cur:
             rows = await cur.fetchall()
             return [dict(r) for r in rows]

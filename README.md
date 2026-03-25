@@ -37,6 +37,7 @@ Fragt vor dem Löschen des Verzeichnisses (inkl. Datenbank und Timelapse-Aufnahm
 - **SwitchBot Integration** – direkte Bluetooth-Verbindung, kein Cloud-API nötig (Meter, Meter Plus, Outdoor Meter / WoIOSensor)
 - **Zwei Sensoren** – frei konfigurierbar welcher innen/außen ist
 - **Regelungsarten** – Temperatur, Feuchtigkeit oder kombiniert
+- **Trendanalyse** – eigene Seite mit Liniendiagramm, wählbare Zeitbereiche (1h–30d oder benutzerdefiniert), 5 Datenreihen per Checkbox ein-/ausblendbar, CSV-Export
 - **Trend-Indikatoren** – zeigen ob Werte steigen, fallen oder stabil sind
 - **Verlaufsdiagramme** – Temperatur, Feuchtigkeit, Lüfterdrehzahl mit unabhängiger Zeitbereichswahl
 - **Timelapse** – USB-Kamera mit automatischer Erkennung, konfigurierbares Intervall (Stunden), ffmpeg-Kompilierung und Download
@@ -106,8 +107,8 @@ greenhouse-control/
 │   └── scheduler.py         # Asyncio-Tasks: BLE, Lüfter, Timelapse, Logging
 │
 ├── api/
-│   ├── sensors.py           # GET /current, /history, POST /discover
-│   ├── fans.py              # GET /status, POST /manual, /auto
+│   ├── sensors.py           # GET /current, /history (Zeitbereich, Downsampling), POST /discover
+│   ├── fans.py              # GET /status, /history (Zeitbereich, Downsampling), POST /manual, /auto
 │   ├── timelapse.py         # start/stop/compile/preview/cameras/sessions
 │   ├── settings.py          # GET/PUT alle Einstellungen
 │   ├── update.py            # GET /check, POST /apply, GET /status
@@ -115,11 +116,13 @@ greenhouse-control/
 │
 └── static/
     ├── index.html           # Single-Page Dashboard (PWA)
+    ├── trend.html           # Trendanalyse-Seite (Chart.js + Zeitbereich)
     ├── manifest.json        # PWA-Manifest (App-Name, Icons, Theme)
     ├── sw.js                # Service Worker (Offline-Cache)
     ├── icon-*.svg           # App-Icons (192, 512, maskable)
     ├── css/style.css        # Dark-Theme, responsives Grid
-    └── js/app.js            # Polling (10s), Chart.js, SVG-Gauge
+    ├── js/app.js            # Polling (10s), Chart.js, SVG-Gauge
+    └── js/trend.js          # Trendanalyse-Logik (Dual-Achsen, CSV-Export)
 ```
 
 ---
@@ -129,10 +132,11 @@ greenhouse-control/
 | Methode | Endpunkt | Beschreibung |
 |---|---|---|
 | GET | `/api/sensors/current` | Aktuelle Sensor-Werte (innen + außen) |
-| GET | `/api/sensors/history?hours=24` | Verlaufsdaten |
+| GET | `/api/sensors/history?hours=24&max_points=800` | Verlaufsdaten (Zeitbereich, Downsampling) |
 | POST | `/api/sensors/discover` | SwitchBot-Geräte in der Nähe suchen |
 | GET | `/api/fans/status` | Lüfter-Status und Drehzahl |
 | POST | `/api/fans/manual` | Manuelle Drehzahl `{"speed": 0.75}` |
+| GET | `/api/fans/history?hours=24&max_points=800` | Lüfter-Verlauf (Zeitbereich, Downsampling) |
 | POST | `/api/fans/auto` | Zurück in Automatik |
 | GET | `/api/settings` | Alle Einstellungen lesen |
 | PUT | `/api/settings` | Einstellungen aktualisieren |
@@ -196,6 +200,18 @@ Der Lüfter arbeitet im **Abluft-Prinzip** (schiebt Luft aus dem Gewächshaus he
 - Drehzahl skaliert proportional zwischen `fan_min` und `fan_max`
 - Unter Mindest-Drehzahl wird der Lüfter komplett ausgeschaltet
 - **Frostschutz**: Lüfter wird blockiert wenn die Innentemperatur unter `fan_min_temperature` fällt (Standard: 5 °C)
+
+---
+
+## Trendanalyse
+
+Eigene Seite erreichbar über den **Trends**-Button im Dashboard-Header oder direkt unter `/trend.html`.
+
+- **Zeitbereiche**: 1h, 6h, 12h, 24h, 48h, 7d, 30d oder benutzerdefinierter Zeitraum (Von/Bis)
+- **Datenreihen**: Innen-Temperatur, Außen-Temperatur, Innen-Feuchte, Außen-Feuchte, Lüfter-Geschwindigkeit – einzeln per Checkbox ein-/ausblendbar
+- **Dual-Achsen**: Temperatur (°C) links, Feuchte/Lüfter (%) rechts
+- **CSV-Export**: alle sichtbaren Daten als Semikolon-getrennte CSV-Datei (UTF-8, Excel-kompatibel)
+- **Downsampling**: serverseitiges Reduzieren auf max. 800 Datenpunkte bei großen Zeitbereichen
 
 ---
 

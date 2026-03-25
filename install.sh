@@ -393,7 +393,11 @@ echo ""
 echo "============================================================"
 echo -e "  ${GREEN}${BOLD}Installation abgeschlossen!${NC}"
 echo ""
-echo "  Dashboard:  http://${IP}:${PORT}"
+if [ "$PORT" = "80" ]; then
+  echo "  Dashboard:  http://${IP}"
+else
+  echo "  Dashboard:  http://${IP}:${PORT}"
+fi
 echo ""
 echo "  Befehle:"
 echo "    Status:   sudo systemctl status ${SERVICE_NAME}"

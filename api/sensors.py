@@ -15,11 +15,30 @@ async def get_current():
 
 
 @router.get("/history")
-async def get_history(hours: int = Query(default=24, ge=1, le=168)):
-    """Historical sensor readings (up to 7 days)."""
-    inside  = await state.db.get_readings("inside",  hours)
-    outside = await state.db.get_readings("outside", hours)
+async def get_history(
+    hours: int = Query(default=24, ge=1, le=720),
+    max_points: int = Query(default=0, ge=0, le=2000),
+    from_ts: str = Query(default=None),
+    to_ts: str = Query(default=None),
+):
+    """Historical sensor readings (up to 30 days)."""
+    if from_ts and to_ts:
+        inside  = await state.db.get_readings_range("inside", from_ts, to_ts)
+        outside = await state.db.get_readings_range("outside", from_ts, to_ts)
+    else:
+        inside  = await state.db.get_readings("inside",  hours)
+        outside = await state.db.get_readings("outside", hours)
+    if max_points > 0:
+        inside  = _downsample(inside, max_points)
+        outside = _downsample(outside, max_points)
     return {"inside": inside, "outside": outside}
+
+
+def _downsample(rows: list, max_points: int) -> list:
+    if len(rows) <= max_points:
+        return rows
+    step = len(rows) / max_points
+    return [rows[int(i * step)] for i in range(max_points)]
 
 
 @router.post("/discover")

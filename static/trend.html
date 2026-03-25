@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d1117" />
+  <title>Trendanalyse – Gewächshaus</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <style>
+    .trend-header { display:flex; align-items:center; gap:.8rem; padding:.6rem 1rem; background:var(--bg2); border-bottom:1px solid var(--border); }
+    .trend-header h1 { font-size:1.1rem; font-weight:600; color:var(--accent2); }
+    .trend-header .back { color:var(--text3); text-decoration:none; font-size:1.2rem; }
+    .trend-header .back:hover { color:var(--accent); }
+
+    .trend-toolbar { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; padding:.7rem 1rem; background:var(--bg2); border-bottom:1px solid var(--border); }
+    .trend-toolbar .group { display:flex; flex-wrap:wrap; gap:.3rem; align-items:center; }
+    .trend-toolbar .sep { width:1px; height:1.4rem; background:var(--border); margin:0 .3rem; }
+
+    .range-btn { padding:.25rem .55rem; border-radius:5px; border:1px solid var(--border); background:var(--bg3); color:var(--text2); cursor:pointer; font-size:.8rem; }
+    .range-btn:hover { border-color:var(--accent); color:var(--accent); }
+    .range-btn.active { background:var(--accent3); border-color:var(--accent); color:#fff; }
+
+    .series-toggle { display:flex; align-items:center; gap:.3rem; font-size:.8rem; color:var(--text2); cursor:pointer; user-select:none; }
+    .series-toggle input { display:none; }
+    .series-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+    .series-toggle.off .series-label { color:var(--text3); text-decoration:line-through; }
+    .series-toggle.off .series-dot { opacity:.3; }
+
+    .custom-range { display:flex; flex-wrap:wrap; gap:.4rem; align-items:center; font-size:.8rem; color:var(--text2); }
+    .custom-range input { background:var(--bg3); border:1px solid var(--border); color:var(--text); border-radius:5px; padding:.2rem .4rem; font-size:.8rem; }
+
+    .trend-chart-wrap { flex:1; min-height:0; padding:.5rem; }
+    .trend-chart-wrap canvas { width:100%!important; height:100%!important; }
+
+    .trend-main { display:flex; flex-direction:column; height:calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+
+    .export-btn { margin-left:auto; }
+
+    @media (max-width:700px) {
+      .trend-toolbar { gap:.4rem; padding:.5rem .6rem; }
+      .range-btn { padding:.2rem .4rem; font-size:.75rem; }
+      .series-toggle { font-size:.75rem; }
+      .trend-toolbar .sep { display:none; }
+    }
+  </style>
+</head>
+<body>
+<div class="trend-main">
+
+  <div class="trend-header">
+    <a href="/" class="back" title="Zurück zum Dashboard">&#8592;</a>
+    <span class="logo">&#9752;</span>
+    <h1>Trendanalyse</h1>
+  </div>
+
+  <div class="trend-toolbar">
+    <div class="group" id="range-buttons">
+      <button class="range-btn" data-hours="1">1h</button>
+      <button class="range-btn" data-hours="6">6h</button>
+      <button class="range-btn" data-hours="12">12h</button>
+      <button class="range-btn active" data-hours="24">24h</button>
+      <button class="range-btn" data-hours="48">48h</button>
+      <button class="range-btn" data-hours="168">7d</button>
+      <button class="range-btn" data-hours="720">30d</button>
+      <button class="range-btn" data-hours="custom" id="btn-custom">Zeitraum</button>
+    </div>
+
+    <div class="custom-range hidden" id="custom-range">
+      <label>Von <input type="datetime-local" id="range-from" /></label>
+      <label>Bis <input type="datetime-local" id="range-to" /></label>
+      <button class="range-btn" onclick="loadCustomRange()">Laden</button>
+    </div>
+
+    <div class="sep"></div>
+
+    <div class="group" id="series-toggles">
+      <label class="series-toggle" data-idx="0">
+        <input type="checkbox" checked />
+        <span class="series-dot" style="background:#ef5350"></span>
+        <span class="series-label">Innen Temp</span>
+      </label>
+      <label class="series-toggle" data-idx="1">
+        <input type="checkbox" checked />
+        <span class="series-dot" style="background:#58a6ff"></span>
+        <span class="series-label">Aussen Temp</span>
+      </label>
+      <label class="series-toggle" data-idx="2">
+        <input type="checkbox" checked />
+        <span class="series-dot" style="background:#3fb950"></span>
+        <span class="series-label">Innen Feuchte</span>
+      </label>
+      <label class="series-toggle" data-idx="3">
+        <input type="checkbox" checked />
+        <span class="series-dot" style="background:#f0883e"></span>
+        <span class="series-label">Aussen Feuchte</span>
+      </label>
+      <label class="series-toggle" data-idx="4">
+        <input type="checkbox" checked />
+        <span class="series-dot" style="background:#e3b341"></span>
+        <span class="series-label">Luefter</span>
+      </label>
+    </div>
+
+    <div class="sep"></div>
+
+    <button class="range-btn export-btn" onclick="exportCSV()">CSV Export</button>
+  </div>
+
+  <div class="trend-chart-wrap">
+    <canvas id="trend-chart"></canvas>
+  </div>
+
+</div>
+
+<script src="/js/trend.js"></script>
+</body>
+</html>

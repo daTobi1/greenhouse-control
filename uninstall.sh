@@ -20,11 +20,18 @@ echo "============================================================"
 echo "  Greenhouse Control – Deinstallation"
 echo "============================================================"
 echo ""
+
+# ── Terminal-Eingabe vorbereiten (funktioniert auch bei curl | bash) ──
+exec 3</dev/tty 2>/dev/null || exec 3</dev/null
 echo -e "${YELLOW}Folgendes wird entfernt:${NC}"
 echo "  - systemd Service '${SERVICE_NAME}'"
+echo "  - sudoers-Regel: /etc/sudoers.d/greenhouse"
+echo "  - Polkit-Regeln für WLAN-Steuerung"
+echo "  - sysctl-Regel für Port 80"
 echo "  - Installationsverzeichnis: ${INSTALL_DIR}"
 echo ""
-read -rp "Fortfahren? [j/N] " confirm
+printf "Fortfahren? [j/N] "
+read -r confirm <&3 2>/dev/null || confirm=""
 [[ "$confirm" =~ ^[jJyY]$ ]] || { echo "Abgebrochen."; exit 0; }
 
 # ── Service stoppen und entfernen ───────────────────────────
@@ -45,6 +52,29 @@ if [ -f "$SERVICE_FILE" ]; then
   ok "Service-Datei entfernt"
 fi
 
+# ── sudoers-Regel entfernen ───────────────────────────────
+if [ -f /etc/sudoers.d/greenhouse ]; then
+  sudo rm /etc/sudoers.d/greenhouse
+  ok "sudoers-Regel entfernt"
+fi
+
+# ── Polkit-Regeln entfernen ──────────────────────────────
+if [ -f /etc/polkit-1/rules.d/10-greenhouse-network.rules ]; then
+  sudo rm /etc/polkit-1/rules.d/10-greenhouse-network.rules
+  ok "Polkit-Regel entfernt (rules.d)"
+fi
+if [ -f /etc/polkit-1/localauthority/50-local.d/10-greenhouse-network.pkla ]; then
+  sudo rm /etc/polkit-1/localauthority/50-local.d/10-greenhouse-network.pkla
+  ok "Polkit-Regel entfernt (pkla)"
+fi
+
+# ── sysctl-Regel für Port 80 entfernen ───────────────────
+if [ -f /etc/sysctl.d/80-unprivileged-port.conf ]; then
+  sudo rm /etc/sysctl.d/80-unprivileged-port.conf
+  sudo sysctl --system > /dev/null 2>&1
+  ok "sysctl-Regel für Port 80 entfernt"
+fi
+
 # ── Python-Berechtigungen zurücksetzen ─────────────────────
 PYTHON_BIN="${INSTALL_DIR}/venv/bin/python3"
 if [ -f "$PYTHON_BIN" ]; then
@@ -54,7 +84,8 @@ fi
 # ── Installationsverzeichnis entfernen ─────────────────────
 if [ -d "$INSTALL_DIR" ]; then
   echo ""
-  read -rp "Verzeichnis '${INSTALL_DIR}' (inkl. Datenbank und Timelapse-Aufnahmen) löschen? [j/N] " confirm2
+  printf "Verzeichnis '${INSTALL_DIR}' (inkl. Datenbank und Timelapse-Aufnahmen) löschen? [j/N] "
+  read -r confirm2 <&3 2>/dev/null || confirm2=""
   if [[ "$confirm2" =~ ^[jJyY]$ ]]; then
     rm -rf "$INSTALL_DIR"
     ok "Verzeichnis entfernt"
