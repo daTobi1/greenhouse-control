@@ -1,0 +1,30 @@
+{
+  "name": "Gewächshaus Steuerung",
+  "short_name": "Gewächshaus",
+  "description": "Raspberry Pi Gewächshaus-Steuerung mit Lüfterregelung und BLE-Sensoren",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "icons": [
+    {
+      "src": "/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

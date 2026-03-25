@@ -2,7 +2,13 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d1117" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Gewächshaus" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/icon-192.svg" />
   <title>Gewächshaus Steuerung</title>
   <link rel="stylesheet" href="/css/style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
@@ -24,6 +30,8 @@
     <span class="status-label" id="lbl-cam">Kamera</span>
     <span class="status-dot" id="dot-wifi" title="WLAN"></span>
     <span class="status-label clickable" id="lbl-wifi" onclick="openWifi()">WLAN</span>
+    <span class="status-dot" id="dot-ts" title="Tailscale VPN"></span>
+    <span class="status-label clickable" id="lbl-ts" onclick="openSettings()">VPN</span>
     <span id="clock" class="clock"></span>
     <button class="btn-small" onclick="openUpdate()">Auf Updates prüfen</button>
     <span id="update-badge" class="update-badge hidden">Neu</span>
@@ -434,6 +442,80 @@
       <div class="control-row" data-tooltip="Automatische Prüfung auf neue Software-Versionen alle N Tage. 0 = automatische Prüfung deaktiviert, nur manuell per Button.">
         <label>Automatisch prüfen (Tage, 0 = aus)</label>
         <input type="number" id="update-interval-days" min="0" max="365" step="1" value="7" />
+      </div>
+
+      <h3>App installieren</h3>
+      <button class="btn btn-secondary" id="btn-pwa-guide" onclick="togglePwaGuide()">Anleitung anzeigen</button>
+      <div id="pwa-guide" class="hidden" style="margin-top:.6rem">
+        <div style="background:var(--bg3);border-radius:6px;padding:.7rem .9rem;font-size:.82rem;color:var(--text2);line-height:1.6">
+          <p style="margin:0 0 .5rem">Das Dashboard kann als App auf dem Handy installiert werden. Es erscheint mit eigenem Icon auf dem Homescreen und laeuft im Vollbild.</p>
+
+          <p style="margin:0 0 .3rem"><strong>Android (Chrome):</strong></p>
+          <ol style="margin:0 0 .6rem;padding-left:1.2rem">
+            <li>Dashboard im Browser oeffnen</li>
+            <li>Chrome zeigt automatisch &bdquo;Zum Startbildschirm hinzufuegen&ldquo; &ndash; oder: Menu (drei Punkte) &rarr; <em>App installieren</em></li>
+          </ol>
+
+          <p style="margin:0 0 .3rem"><strong>iOS (Safari):</strong></p>
+          <ol style="margin:0 0 .6rem;padding-left:1.2rem">
+            <li>Dashboard in Safari oeffnen</li>
+            <li>Teilen-Button &rarr; <em>Zum Home-Bildschirm</em></li>
+          </ol>
+
+          <p style="margin:0 0 0;color:var(--text3)">Tipp: Oeffne das Dashboard ueber diesen Link, damit die App auch unterwegs funktioniert:<br><a id="pwa-install-link" href="#" target="_blank" style="color:var(--accent);font-size:.9rem">--</a></p>
+        </div>
+      </div>
+
+      <h3>Tailscale VPN</h3>
+      <div class="wifi-status-box" id="settings-ts-box">
+        <div class="wifi-status-row">
+          <span class="wifi-status-label">Status</span>
+          <span id="settings-ts-status">--</span>
+        </div>
+        <div class="wifi-status-row">
+          <span class="wifi-status-label">Tailscale IP</span>
+          <span id="settings-ts-ip">--</span>
+        </div>
+        <div class="wifi-status-row">
+          <span class="wifi-status-label">Hostname</span>
+          <span id="settings-ts-hostname">--</span>
+        </div>
+        <div class="wifi-status-row">
+          <span class="wifi-status-label">Tailnet</span>
+          <span id="settings-ts-tailnet">--</span>
+        </div>
+        <div class="wifi-status-row" style="margin-top:.4rem;padding-top:.4rem;border-top:1px solid var(--border)">
+          <span class="wifi-status-label">VPN</span>
+          <button class="btn-small" id="btn-settings-ts-toggle" onclick="toggleTailscaleFromSettings()">--</button>
+        </div>
+      </div>
+
+      <div id="settings-ts-auth-wrap" class="hidden" style="margin-top:.5rem;padding:.6rem;background:var(--bg3);border-radius:6px">
+        <p style="margin:0 0 .4rem;font-weight:600;color:var(--warn)">Anmeldung erforderlich</p>
+        <p class="hint" style="margin:0 0 .4rem">Diesen Link im Browser oeffnen:</p>
+        <a id="settings-ts-auth-url" href="#" target="_blank" style="color:var(--accent);word-break:break-all;font-size:.85rem"></a>
+      </div>
+
+      <span id="settings-ts-spinner" class="hidden" style="color:var(--text3);font-size:.82rem">Bitte warten...</span>
+
+      <button class="btn btn-secondary" id="btn-settings-ts-setup" onclick="toggleSettingsTsSetup()" style="margin-top:.5rem">Einrichtungsanleitung</button>
+      <div id="settings-ts-setup-guide" class="hidden" style="margin-top:.6rem">
+        <div style="background:var(--bg3);border-radius:6px;padding:.7rem .9rem;font-size:.82rem;color:var(--text2);line-height:1.6">
+          <p style="margin:0 0 .5rem"><strong>Was ist Tailscale?</strong></p>
+          <p style="margin:0 0 .6rem">Tailscale ist ein VPN-Dienst, der deine Geraete (Pi, Handy, Laptop) ueber das Internet sicher verbindet &ndash; als waeren sie im selben Netzwerk. Verschluesselt, kein Portforwarding noetig, kostenlos fuer bis zu 3 Nutzer.</p>
+
+          <p style="margin:0 0 .3rem"><strong>1. Tailscale auf dem Pi</strong></p>
+          <p style="margin:0 0 .6rem">Tailscale ist auf diesem Pi bereits installiert. Klicke oben auf <em>Einschalten</em>, um es zu starten.</p>
+
+          <p style="margin:0 0 .3rem"><strong>2. Erstmalig anmelden</strong></p>
+          <p style="margin:0 0 .6rem">Beim ersten Start erscheint ein Anmelde-Link. Diesen im Browser oeffnen, mit Google, Microsoft oder GitHub anmelden. Der Pi wird dann deinem Tailscale-Netzwerk hinzugefuegt.</p>
+
+          <p style="margin:0 0 .3rem"><strong>3. Tailscale auf deinem Geraet</strong></p>
+          <p style="margin:0 0 .6rem">Installiere Tailscale auf deinem Handy oder Laptop (<a href="https://tailscale.com/download" target="_blank" style="color:var(--accent)">tailscale.com/download</a>) und melde dich mit dem gleichen Konto an.</p>
+
+          <p style="margin:0 0 .3rem"><strong>4. Dashboard aufrufen</strong></p>
+          <p style="margin:0 0 0">Sobald beide Geraete verbunden sind, ist das Dashboard ueber die Tailscale-IP erreichbar: <code>http://&lt;Tailscale-IP&gt;:8080</code>. Die IP wird oben angezeigt.</p>
+        </div>
       </div>
 
       <h3>System</h3>

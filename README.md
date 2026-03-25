@@ -32,6 +32,8 @@ Fragt vor dem Löschen des Verzeichnisses (inkl. Datenbank und Timelapse-Aufnahm
 ## Features
 
 - **Web-Dashboard** – erreichbar im lokalen Netzwerk oder per VPN (Tailscale, WireGuard)
+- **PWA / Handy-App** – als App auf dem Homescreen installierbar (Android + iOS), Vollbild, offline-fähig
+- **Tailscale VPN** – Ein-Klick-Einrichtung im Dashboard für sicheren Fernzugriff über das Internet
 - **Lüfterregelung** – proportionale PWM-Regelung via MOSFET, Abluft-Prinzip
 - **SwitchBot Integration** – direkte Bluetooth-Verbindung, kein Cloud-API nötig (Meter, Meter Plus, Outdoor Meter / WoIOSensor)
 - **Zwei Sensoren** – frei konfigurierbar welcher innen/außen ist
@@ -109,10 +111,14 @@ greenhouse-control/
 │   ├── fans.py              # GET /status, POST /manual, /auto
 │   ├── timelapse.py         # start/stop/compile/preview/cameras/sessions
 │   ├── settings.py          # GET/PUT alle Einstellungen
-│   └── update.py            # GET /check, POST /apply, GET /status
+│   ├── update.py            # GET /check, POST /apply, GET /status
+│   └── tailscale.py         # GET /status, POST /up, /down (VPN-Steuerung)
 │
 └── static/
-    ├── index.html           # Single-Page Dashboard
+    ├── index.html           # Single-Page Dashboard (PWA)
+    ├── manifest.json        # PWA-Manifest (App-Name, Icons, Theme)
+    ├── sw.js                # Service Worker (Offline-Cache)
+    ├── icon-*.svg           # App-Icons (192, 512, maskable)
     ├── css/style.css        # Dark-Theme, responsives Grid
     └── js/app.js            # Polling (10s), Chart.js, SVG-Gauge
 ```
@@ -139,6 +145,9 @@ greenhouse-control/
 | GET | `/api/update/check` | Auf neue Version prüfen |
 | POST | `/api/update/apply` | Update installieren (Hintergrund) |
 | GET | `/api/update/status` | Status eines laufenden Updates |
+| GET | `/api/tailscale/status` | Tailscale VPN-Status (IP, Hostname, Tailnet) |
+| POST | `/api/tailscale/up` | Tailscale einschalten |
+| POST | `/api/tailscale/down` | Tailscale ausschalten |
 
 Interaktive Dokumentation: `http://<Pi-IP>:8080/docs`
 

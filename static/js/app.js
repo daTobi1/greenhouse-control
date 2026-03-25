@@ -1091,6 +1091,138 @@ async function wifiConnectManual() {
   }
 }
 
+// ----------------------------------------------------------------
+// PWA install guide
+// ----------------------------------------------------------------
+function togglePwaGuide() {
+  const guide = document.getElementById('pwa-guide');
+  const btn = document.getElementById('btn-pwa-guide');
+  if (guide.classList.contains('hidden')) {
+    guide.classList.remove('hidden');
+    btn.textContent = 'Anleitung ausblenden';
+    // Build install link: prefer Tailscale IP, fallback to local IP
+    const tsIp = document.getElementById('settings-ts-ip');
+    const link = document.getElementById('pwa-install-link');
+    let ip = null;
+    if (tsIp && tsIp.textContent && tsIp.textContent !== '--') {
+      ip = tsIp.textContent;
+    } else {
+      ip = location.hostname;
+    }
+    if (ip && link) {
+      const url = `http://${ip}:8080`;
+      link.href = url;
+      link.textContent = url;
+    }
+  } else {
+    guide.classList.add('hidden');
+    btn.textContent = 'Anleitung anzeigen';
+  }
+}
+
+// ----------------------------------------------------------------
+// Tailscale VPN
+// ----------------------------------------------------------------
+async function fetchTailscaleStatus() {
+  try {
+    const r = await fetch(`${API}/api/tailscale/status`);
+    const d = await r.json();
+    const statusEl  = document.getElementById('settings-ts-status');
+    const ipEl      = document.getElementById('settings-ts-ip');
+    const hostEl    = document.getElementById('settings-ts-hostname');
+    const netEl     = document.getElementById('settings-ts-tailnet');
+    const dot       = document.getElementById('dot-ts');
+    const toggleBtn = document.getElementById('btn-settings-ts-toggle');
+    const authWrap  = document.getElementById('settings-ts-auth-wrap');
+
+    if (!d.installed) {
+      statusEl.textContent = 'Nicht installiert';
+      statusEl.style.color = 'var(--text3)';
+      ipEl.textContent = hostEl.textContent = netEl.textContent = '--';
+      toggleBtn.textContent = '--';
+      toggleBtn.disabled = true;
+      dot.className = 'status-dot';
+      authWrap.classList.add('hidden');
+      return;
+    }
+
+    toggleBtn.disabled = false;
+    authWrap.classList.add('hidden');
+
+    if (d.state === 'Running') {
+      statusEl.textContent = 'Verbunden';
+      statusEl.style.color = 'var(--accent)';
+      ipEl.textContent = d.ip || '--';
+      hostEl.textContent = d.hostname || '--';
+      netEl.textContent = d.tailnet || '--';
+      dot.className = 'status-dot ok';
+      toggleBtn.textContent = 'Ausschalten';
+      toggleBtn.className = 'btn-small btn-small-danger';
+    } else if (d.state === 'NeedsLogin') {
+      statusEl.textContent = 'Anmeldung erforderlich';
+      statusEl.style.color = 'var(--warn)';
+      ipEl.textContent = hostEl.textContent = netEl.textContent = '--';
+      dot.className = 'status-dot warn';
+      toggleBtn.textContent = 'Einschalten';
+      toggleBtn.className = 'btn-small';
+      if (d.auth_url) {
+        authWrap.classList.remove('hidden');
+        const link = document.getElementById('settings-ts-auth-url');
+        link.href = d.auth_url;
+        link.textContent = d.auth_url;
+      }
+    } else {
+      statusEl.textContent = 'Gestoppt';
+      statusEl.style.color = 'var(--text3)';
+      ipEl.textContent = hostEl.textContent = netEl.textContent = '--';
+      dot.className = 'status-dot';
+      toggleBtn.textContent = 'Einschalten';
+      toggleBtn.className = 'btn-small';
+    }
+  } catch(e) {
+    document.getElementById('dot-ts').className = 'status-dot';
+  }
+}
+
+async function toggleTailscaleFromSettings() {
+  const btn = document.getElementById('btn-settings-ts-toggle');
+  const spinner = document.getElementById('settings-ts-spinner');
+  const isOn = btn.textContent === 'Ausschalten';
+  btn.disabled = true;
+  spinner.classList.remove('hidden');
+
+  try {
+    const endpoint = isOn ? '/api/tailscale/down' : '/api/tailscale/up';
+    const r = await fetch(`${API}${endpoint}`, { method: 'POST' });
+    const d = await r.json();
+    if (d.auth_url) {
+      const authWrap = document.getElementById('settings-ts-auth-wrap');
+      authWrap.classList.remove('hidden');
+      const link = document.getElementById('settings-ts-auth-url');
+      link.href = d.auth_url;
+      link.textContent = d.auth_url;
+    }
+    showToast(d.message || (isOn ? 'VPN gestoppt' : 'VPN gestartet'));
+  } catch(e) {
+    showToast('Tailscale-Fehler');
+  }
+
+  spinner.classList.add('hidden');
+  setTimeout(fetchTailscaleStatus, 2000);
+}
+
+function toggleSettingsTsSetup() {
+  const guide = document.getElementById('settings-ts-setup-guide');
+  const btn = document.getElementById('btn-settings-ts-setup');
+  if (guide.classList.contains('hidden')) {
+    guide.classList.remove('hidden');
+    btn.textContent = 'Anleitung ausblenden';
+  } else {
+    guide.classList.add('hidden');
+    btn.textContent = 'Einrichtungsanleitung';
+  }
+}
+
 async function systemReboot() {
   if (!confirm('Raspberry Pi jetzt neu starten?\n\nDas Dashboard ist für ca. 30–60 Sekunden nicht erreichbar.')) return;
   const el = document.getElementById('system-status');
@@ -1334,6 +1466,7 @@ async function init() {
   await loadHistory();
   refreshPreview();
   fetchWifiStatus();
+  fetchTailscaleStatus();
 
   // Poll every 10 seconds
   pollTimer = setInterval(pollAll, 10_000);
@@ -1341,12 +1474,19 @@ async function init() {
   setInterval(loadHistory, 120_000);
   // Reload sessions every 30 seconds
   setInterval(loadSessions, 30_000);
+  // Tailscale status every 60 seconds
+  setInterval(fetchTailscaleStatus, 60_000);
   // Schedule automatic update check based on saved interval
   try {
     const r = await fetch(`${API}/api/settings`);
     const s = await r.json();
     scheduleUpdateCheck(s.update_check_interval_days ?? 7);
   } catch(e) {}
+
+  // Register service worker for PWA
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
 }
 
 // ----------------------------------------------------------------
