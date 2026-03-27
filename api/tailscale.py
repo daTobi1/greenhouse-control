@@ -131,10 +131,42 @@ async def tailscale_down():
     return {"ok": True, "message": "Tailscale gestoppt"}
 
 
+@router.get("/debug")
+async def tailscale_debug():
+    """Debug info: find state files, check daemon, show status."""
+    log = []
+
+    # Find all tailscale state files
+    rc, out, _ = await _run(["sudo", "find", "/var/lib", "/etc", "/root",
+                              "-name", "*tailscale*", "-type", "f"], timeout=10)
+    log.append(f"state files:\n{out.strip() or '(none)'}")
+
+    # Check tailscaled service
+    rc, out, _ = await _run(["systemctl", "is-active", "tailscaled"], timeout=5)
+    log.append(f"tailscaled active: {out.strip()}")
+
+    # Tailscale status
+    rc, out, _ = await _run(["tailscale", "status", "--json"], timeout=10)
+    if rc == 0:
+        try:
+            data = json.loads(out)
+            log.append(f"BackendState: {data.get('BackendState')}")
+            log.append(f"AuthURL: {data.get('AuthURL', '(none)')}")
+            self_node = data.get("Self", {})
+            log.append(f"NodeKey: {self_node.get('PublicKey', '(none)')}")
+        except json.JSONDecodeError:
+            log.append(f"status parse error: {out[:200]}")
+    else:
+        log.append(f"status failed (rc={rc})")
+
+    return {"log": "\n".join(log)}
+
+
 @router.post("/reauth")
 async def tailscale_reauth():
     """Full Tailscale state reset + re-authentication."""
     global _reauth_proc
+    log = []
 
     # Kill any previous reauth process
     if _reauth_proc and _reauth_proc.returncode is None:
@@ -144,21 +176,34 @@ async def tailscale_reauth():
         except Exception:
             pass
 
-    # Step 1: Try logout (may fail if already broken, that's ok)
+    # Step 1: Try logout (may fail, that's ok)
     rc, out, err = await _run(["sudo", "tailscale", "logout"], timeout=10)
+    log.append(f"logout: rc={rc} err={err.strip()}")
     logger.info(f"tailscale logout: rc={rc} out={out.strip()!r} err={err.strip()!r}")
 
     # Step 2: Stop tailscaled daemon
     rc, out, err = await _run(["sudo", "systemctl", "stop", "tailscaled"], timeout=10)
-    logger.info(f"stop tailscaled: rc={rc} out={out.strip()!r} err={err.strip()!r}")
+    log.append(f"stop daemon: rc={rc}")
+    logger.info(f"stop tailscaled: rc={rc} err={err.strip()!r}")
 
-    # Step 3: Delete local state file (removes stuck node key)
-    rc, out, err = await _run(["sudo", "rm", "-f", "/var/lib/tailscale/tailscaled.state"], timeout=5)
-    logger.info(f"rm state: rc={rc} out={out.strip()!r} err={err.strip()!r}")
+    # Step 3: Delete ALL local state files (covers different OS/install paths)
+    state_paths = [
+        "/var/lib/tailscale/tailscaled.state",
+        "/var/lib/tailscale/tailscaled.state.tmp",
+        "/var/lib/tailscale/tailscaled.log.conf",
+    ]
+    # Also wipe the whole tailscale state directory
+    rc, out, err = await _run(
+        ["sudo", "sh", "-c", "rm -rf /var/lib/tailscale && mkdir -p /var/lib/tailscale"],
+        timeout=5,
+    )
+    log.append(f"wipe state dir: rc={rc}")
+    logger.info(f"wipe /var/lib/tailscale: rc={rc} err={err.strip()!r}")
 
-    # Step 4: Restart tailscaled daemon
+    # Step 4: Restart tailscaled daemon (fresh state)
     rc, out, err = await _run(["sudo", "systemctl", "start", "tailscaled"], timeout=15)
-    logger.info(f"start tailscaled: rc={rc} out={out.strip()!r} err={err.strip()!r}")
+    log.append(f"start daemon: rc={rc}")
+    logger.info(f"start tailscaled: rc={rc} err={err.strip()!r}")
 
     # Step 5: Wait for daemon to be ready
     await asyncio.sleep(3)
@@ -169,6 +214,7 @@ async def tailscale_reauth():
         stdout=asyncio.subprocess.DEVNULL,
         stderr=asyncio.subprocess.DEVNULL,
     )
+    log.append(f"tailscale up pid={_reauth_proc.pid}")
     logger.info(f"tailscale up started (pid={_reauth_proc.pid})")
 
     # Step 7: Poll status for auth URL
@@ -180,12 +226,14 @@ async def tailscale_reauth():
                 data = json.loads(status_out)
                 state = data.get("BackendState", "")
                 auth_url = data.get("AuthURL", "")
+                log.append(f"poll {attempt+1}: state={state} url={'yes' if auth_url else 'no'}")
                 logger.info(f"reauth poll {attempt+1}: state={state} auth_url={auth_url!r}")
                 if auth_url:
                     return {"ok": True, "auth_url": auth_url,
-                            "message": "Anmeldung erforderlich"}
+                            "message": "Anmeldung erforderlich", "debug": "\n".join(log)}
             except json.JSONDecodeError:
                 pass
 
     return {"ok": False, "auth_url": None,
-            "message": "Kein Anmelde-Link erhalten. Pruefe die Logs mit: sudo journalctl -u greenhouse -n 30"}
+            "message": "Kein Anmelde-Link erhalten.",
+            "debug": "\n".join(log)}

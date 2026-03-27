@@ -1215,6 +1215,7 @@ async function reauthTailscale() {
   const btn = document.getElementById('btn-settings-ts-reauth');
   const spinner = document.getElementById('settings-ts-spinner');
   btn.disabled = true;
+  spinner.textContent = 'Tailscale wird zurueckgesetzt... (kann bis zu 30s dauern)';
   spinner.classList.remove('hidden');
 
   try {
@@ -1227,12 +1228,14 @@ async function reauthTailscale() {
       link.href = d.auth_url;
       link.textContent = d.auth_url;
     }
+    if (d.debug) console.log('reauth debug:\n' + d.debug);
     showToast(d.message || 'Neu-Anmeldung gestartet');
   } catch(e) {
-    showToast('Tailscale-Fehler');
+    showToast('Tailscale-Fehler: ' + e.message);
   }
 
   btn.disabled = false;
+  spinner.textContent = 'Bitte warten...';
   spinner.classList.add('hidden');
   setTimeout(fetchTailscaleStatus, 3000);
 }
