@@ -242,3 +242,41 @@ async def tailscale_reauth():
     return {"ok": False, "auth_url": None,
             "message": "Kein Anmelde-Link erhalten.",
             "debug": "\n".join(log)}
+
+
+@router.post("/authkey")
+async def tailscale_authkey(body: dict):
+    """Register with a pre-auth key (bypasses interactive login)."""
+    key = body.get("key", "").strip()
+    if not key:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "Kein Key angegeben"})
+
+    log = []
+
+    # Kill everything, wipe state, fresh start
+    await _run(["sudo", "pkill", "-f", "tailscale up"], timeout=5)
+    await _run(["sudo", "systemctl", "stop", "tailscaled"], timeout=10)
+    await _run(["sudo", "sh", "-c", "rm -rf /var/lib/tailscale && mkdir -p /var/lib/tailscale"], timeout=5)
+
+    rc, _, err = await _run(["sudo", "systemctl", "start", "tailscaled"], timeout=15)
+    log.append(f"start daemon: rc={rc}")
+    if rc != 0:
+        return {"ok": False, "error": f"tailscaled start failed: {err.strip()}", "debug": "\n".join(log)}
+
+    await asyncio.sleep(3)
+
+    # Register with auth key – no interactive login needed
+    rc, out, err = await _run(
+        ["sudo", "tailscale", "up", "--accept-routes", "--authkey", key],
+        timeout=30,
+    )
+    log.append(f"tailscale up --authkey: rc={rc} out={out.strip()} err={err.strip()}")
+    logger.info(f"tailscale authkey: rc={rc} out={out.strip()!r} err={err.strip()!r}")
+
+    if rc == 0:
+        # Verify connection
+        await asyncio.sleep(2)
+        status = await tailscale_status()
+        return {"ok": True, "message": "Tailscale verbunden!", "status": status, "debug": "\n".join(log)}
+
+    return {"ok": False, "error": (err or out).strip(), "debug": "\n".join(log)}

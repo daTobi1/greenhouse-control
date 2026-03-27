@@ -1240,6 +1240,38 @@ async function reauthTailscale() {
   setTimeout(fetchTailscaleStatus, 3000);
 }
 
+async function submitTsAuthKey() {
+  const input = document.getElementById('ts-authkey-input');
+  const key = input.value.trim();
+  if (!key) { showToast('Bitte Auth-Key eingeben'); return; }
+
+  const spinner = document.getElementById('settings-ts-spinner');
+  spinner.textContent = 'Tailscale wird verbunden... (kann bis zu 30s dauern)';
+  spinner.classList.remove('hidden');
+
+  try {
+    const r = await fetch(`${API}/api/tailscale/authkey`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({key}),
+    });
+    const d = await r.json();
+    if (d.debug) console.log('authkey debug:\n' + d.debug);
+    if (d.ok) {
+      showToast('Tailscale verbunden!');
+      document.getElementById('settings-ts-authkey-wrap').classList.add('hidden');
+      input.value = '';
+    } else {
+      showToast('Fehler: ' + (d.error || 'Unbekannt'));
+    }
+  } catch(e) {
+    showToast('Tailscale-Fehler: ' + e.message);
+  }
+
+  spinner.classList.add('hidden');
+  setTimeout(fetchTailscaleStatus, 2000);
+}
+
 function toggleSettingsTsSetup() {
   const guide = document.getElementById('settings-ts-setup-guide');
   const btn = document.getElementById('btn-settings-ts-setup');

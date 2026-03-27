@@ -502,6 +502,16 @@
 
       <span id="settings-ts-spinner" class="hidden" style="color:var(--text3);font-size:.82rem">Bitte warten...</span>
 
+      <div id="settings-ts-authkey-wrap" class="hidden" style="margin-top:.5rem;padding:.6rem;background:var(--bg3);border-radius:6px">
+        <p style="margin:0 0 .4rem;font-weight:600">Mit Auth-Key verbinden</p>
+        <p class="hint" style="margin:0 0 .4rem">Key erstellen unter: <a href="https://login.tailscale.com/admin/settings/keys" target="_blank" style="color:var(--accent)">Tailscale Admin &rarr; Keys</a></p>
+        <div style="display:flex;gap:.4rem">
+          <input type="text" id="ts-authkey-input" placeholder="tskey-auth-..." style="flex:1;font-size:.85rem">
+          <button class="btn-small" onclick="submitTsAuthKey()">Verbinden</button>
+        </div>
+      </div>
+
+      <button class="btn btn-secondary" style="margin-top:.5rem" onclick="document.getElementById('settings-ts-authkey-wrap').classList.toggle('hidden')">Mit Auth-Key verbinden</button>
       <button class="btn btn-secondary" id="btn-settings-ts-setup" onclick="toggleSettingsTsSetup()" style="margin-top:.5rem">Einrichtungsanleitung</button>
       <div id="settings-ts-setup-guide" class="hidden" style="margin-top:.6rem">
         <div style="background:var(--bg3);border-radius:6px;padding:.7rem .9rem;font-size:.82rem;color:var(--text2);line-height:1.6">
