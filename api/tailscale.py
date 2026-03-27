@@ -144,13 +144,13 @@ async def tailscale_reauth():
         except Exception:
             pass
 
-    # Step 1: Disconnect cleanly
-    rc, out, err = await _run(["sudo", "tailscale", "down"], timeout=10)
-    logger.info(f"tailscale down: rc={rc} out={out.strip()!r} err={err.strip()!r}")
-
-    # Step 2: Logout to clear credentials
-    rc, out, err = await _run(["sudo", "tailscale", "logout"], timeout=10)
+    # Step 1: Logout (disconnects AND clears node key with control server)
+    # Do NOT run "tailscale down" first – it blocks logout from reaching the server.
+    rc, out, err = await _run(["sudo", "tailscale", "logout"], timeout=15)
     logger.info(f"tailscale logout: rc={rc} out={out.strip()!r} err={err.strip()!r}")
+
+    # Step 2: Wait for tailscaled to fully process the logout
+    await asyncio.sleep(3)
 
     # Step 3: Start tailscale up --force-reauth as a persistent background
     # process. This MUST stay alive for the auth URL to remain valid.
