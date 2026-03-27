@@ -176,23 +176,17 @@ async def tailscale_reauth():
         except Exception:
             pass
 
-    # Step 1: Try logout (may fail, that's ok)
-    rc, out, err = await _run(["sudo", "tailscale", "logout"], timeout=10)
-    log.append(f"logout: rc={rc} err={err.strip()}")
-    logger.info(f"tailscale logout: rc={rc} out={out.strip()!r} err={err.strip()!r}")
+    # Step 0: Kill ALL orphaned tailscale up processes from previous attempts
+    rc, out, err = await _run(["sudo", "pkill", "-f", "tailscale up"], timeout=5)
+    log.append(f"pkill tailscale up: rc={rc}")
+    logger.info(f"pkill tailscale up: rc={rc}")
 
-    # Step 2: Stop tailscaled daemon
+    # Step 1: Stop tailscaled daemon FIRST (so logout doesn't hang)
     rc, out, err = await _run(["sudo", "systemctl", "stop", "tailscaled"], timeout=10)
     log.append(f"stop daemon: rc={rc}")
     logger.info(f"stop tailscaled: rc={rc} err={err.strip()!r}")
 
-    # Step 3: Delete ALL local state files (covers different OS/install paths)
-    state_paths = [
-        "/var/lib/tailscale/tailscaled.state",
-        "/var/lib/tailscale/tailscaled.state.tmp",
-        "/var/lib/tailscale/tailscaled.log.conf",
-    ]
-    # Also wipe the whole tailscale state directory
+    # Step 2: Wipe ALL tailscale state
     rc, out, err = await _run(
         ["sudo", "sh", "-c", "rm -rf /var/lib/tailscale && mkdir -p /var/lib/tailscale"],
         timeout=5,
@@ -200,13 +194,24 @@ async def tailscale_reauth():
     log.append(f"wipe state dir: rc={rc}")
     logger.info(f"wipe /var/lib/tailscale: rc={rc} err={err.strip()!r}")
 
-    # Step 4: Restart tailscaled daemon (fresh state)
+    # Step 3: Restart tailscaled daemon (completely fresh, no old keys in memory)
     rc, out, err = await _run(["sudo", "systemctl", "start", "tailscaled"], timeout=15)
     log.append(f"start daemon: rc={rc}")
     logger.info(f"start tailscaled: rc={rc} err={err.strip()!r}")
 
-    # Step 5: Wait for daemon to be ready
+    # Step 4: Wait for daemon to be ready
     await asyncio.sleep(3)
+
+    # Step 5: Verify clean state before starting auth
+    status_rc, status_out, _ = await _run(["tailscale", "status", "--json"])
+    if status_rc == 0:
+        try:
+            data = json.loads(status_out)
+            node_key = data.get("Self", {}).get("PublicKey", "")
+            log.append(f"fresh NodeKey: {node_key[:20]}...")
+            logger.info(f"fresh state: BackendState={data.get('BackendState')} NodeKey={node_key}")
+        except json.JSONDecodeError:
+            pass
 
     # Step 6: Start tailscale up as persistent background process
     _reauth_proc = await asyncio.create_subprocess_exec(
