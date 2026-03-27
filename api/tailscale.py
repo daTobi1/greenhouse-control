@@ -133,7 +133,7 @@ async def tailscale_down():
 
 @router.post("/reauth")
 async def tailscale_reauth():
-    """Force re-authentication (logout + up --force-reauth)."""
+    """Full Tailscale state reset + re-authentication."""
     global _reauth_proc
 
     # Kill any previous reauth process
@@ -144,25 +144,35 @@ async def tailscale_reauth():
         except Exception:
             pass
 
-    # Step 1: Logout (disconnects AND clears node key with control server)
-    # Do NOT run "tailscale down" first – it blocks logout from reaching the server.
-    rc, out, err = await _run(["sudo", "tailscale", "logout"], timeout=15)
+    # Step 1: Try logout (may fail if already broken, that's ok)
+    rc, out, err = await _run(["sudo", "tailscale", "logout"], timeout=10)
     logger.info(f"tailscale logout: rc={rc} out={out.strip()!r} err={err.strip()!r}")
 
-    # Step 2: Wait for tailscaled to fully process the logout
+    # Step 2: Stop tailscaled daemon
+    rc, out, err = await _run(["sudo", "systemctl", "stop", "tailscaled"], timeout=10)
+    logger.info(f"stop tailscaled: rc={rc} out={out.strip()!r} err={err.strip()!r}")
+
+    # Step 3: Delete local state file (removes stuck node key)
+    rc, out, err = await _run(["sudo", "rm", "-f", "/var/lib/tailscale/tailscaled.state"], timeout=5)
+    logger.info(f"rm state: rc={rc} out={out.strip()!r} err={err.strip()!r}")
+
+    # Step 4: Restart tailscaled daemon
+    rc, out, err = await _run(["sudo", "systemctl", "start", "tailscaled"], timeout=15)
+    logger.info(f"start tailscaled: rc={rc} out={out.strip()!r} err={err.strip()!r}")
+
+    # Step 5: Wait for daemon to be ready
     await asyncio.sleep(3)
 
-    # Step 3: Start tailscale up --force-reauth as a persistent background
-    # process. This MUST stay alive for the auth URL to remain valid.
+    # Step 6: Start tailscale up as persistent background process
     _reauth_proc = await asyncio.create_subprocess_exec(
-        "sudo", "tailscale", "up", "--accept-routes", "--force-reauth",
+        "sudo", "tailscale", "up", "--accept-routes",
         stdout=asyncio.subprocess.DEVNULL,
         stderr=asyncio.subprocess.DEVNULL,
     )
-    logger.info(f"tailscale up --force-reauth started (pid={_reauth_proc.pid})")
+    logger.info(f"tailscale up started (pid={_reauth_proc.pid})")
 
-    # Step 4: Poll status for auth URL (tailscaled generates it async)
-    for attempt in range(6):
+    # Step 7: Poll status for auth URL
+    for attempt in range(8):
         await asyncio.sleep(2)
         status_rc, status_out, _ = await _run(["tailscale", "status", "--json"])
         if status_rc == 0:
