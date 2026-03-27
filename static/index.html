@@ -505,9 +505,9 @@
       <div id="settings-ts-authkey-wrap" class="hidden" style="margin-top:.5rem;padding:.6rem;background:var(--bg3);border-radius:6px">
         <p style="margin:0 0 .4rem;font-weight:600">Mit Auth-Key verbinden</p>
         <p class="hint" style="margin:0 0 .4rem">Key erstellen unter: <a href="https://login.tailscale.com/admin/settings/keys" target="_blank" style="color:var(--accent)">Tailscale Admin &rarr; Keys</a></p>
-        <div style="display:flex;gap:.4rem">
-          <input type="text" id="ts-authkey-input" placeholder="tskey-auth-..." style="flex:1;font-size:.85rem">
-          <button class="btn-small" onclick="submitTsAuthKey()">Verbinden</button>
+        <div style="display:flex;gap:.4rem;align-items:center">
+          <input type="text" id="ts-authkey-input" placeholder="tskey-auth-..." style="flex:1;font-size:.85rem;padding:.4rem .6rem;border-radius:4px;border:1px solid var(--border);background:var(--bg1);color:var(--text1)">
+          <button class="btn" style="background:var(--accent);color:#fff;padding:.4rem .8rem;white-space:nowrap" onclick="submitTsAuthKey()">Verbinden</button>
         </div>
       </div>
 
