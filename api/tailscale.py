@@ -117,3 +117,40 @@ async def tailscale_down():
             "ok": False, "error": (err or out).strip()
         })
     return {"ok": True, "message": "Tailscale gestoppt"}
+
+
+@router.post("/reauth")
+async def tailscale_reauth():
+    """Force re-authentication (logout + up --force-reauth)."""
+    # Logout first to clear old credentials
+    await _run(["sudo", "tailscale", "logout"], timeout=10)
+
+    # Start with --force-reauth to get a fresh auth URL
+    rc, out, err = await _run(
+        ["sudo", "tailscale", "up", "--accept-routes", "--force-reauth"],
+        timeout=15,
+    )
+
+    combined = out + err
+    auth_url = None
+    url_match = re.search(r'(https://login\.tailscale\.com/\S+)', combined)
+    if url_match:
+        auth_url = url_match.group(1)
+
+    if auth_url:
+        return {"ok": True, "auth_url": auth_url, "message": "Anmeldung erforderlich"}
+
+    # Timeout is expected – check status for auth URL
+    status_rc, status_out, _ = await _run(["tailscale", "status", "--json"])
+    if status_rc == 0:
+        try:
+            data = json.loads(status_out)
+            auth_url = data.get("AuthURL", "")
+            if auth_url:
+                return {"ok": True, "auth_url": auth_url,
+                        "message": "Anmeldung erforderlich"}
+        except json.JSONDecodeError:
+            pass
+
+    return {"ok": True, "auth_url": None,
+            "message": "Tailscale wird neu verbunden..."}

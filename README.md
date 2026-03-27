@@ -112,7 +112,7 @@ greenhouse-control/
 │   ├── timelapse.py         # start/stop/compile/preview/cameras/sessions
 │   ├── settings.py          # GET/PUT alle Einstellungen
 │   ├── update.py            # GET /check, POST /apply, GET /status
-│   └── tailscale.py         # GET /status, POST /up, /down (VPN-Steuerung)
+│   └── tailscale.py         # GET /status, POST /up, /down, /reauth (VPN-Steuerung)
 │
 └── static/
     ├── index.html           # Single-Page Dashboard (PWA)
@@ -151,6 +151,7 @@ greenhouse-control/
 | GET | `/api/tailscale/status` | Tailscale VPN-Status (IP, Hostname, Tailnet) |
 | POST | `/api/tailscale/up` | Tailscale einschalten |
 | POST | `/api/tailscale/down` | Tailscale ausschalten |
+| POST | `/api/tailscale/reauth` | Tailscale neu anmelden (nach Geraete-Entfernung) |
 
 Interaktive Dokumentation: `http://<Pi-IP>/docs`
 

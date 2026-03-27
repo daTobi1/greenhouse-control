@@ -487,7 +487,10 @@
         </div>
         <div class="wifi-status-row" style="margin-top:.4rem;padding-top:.4rem;border-top:1px solid var(--border)">
           <span class="wifi-status-label">VPN</span>
-          <button class="btn-small" id="btn-settings-ts-toggle" onclick="toggleTailscaleFromSettings()">--</button>
+          <span style="display:flex;gap:.4rem">
+            <button class="btn-small" id="btn-settings-ts-toggle" onclick="toggleTailscaleFromSettings()">--</button>
+            <button class="btn-small" id="btn-settings-ts-reauth" onclick="reauthTailscale()" title="Geraet neu anmelden (z.B. nach Entfernung aus Tailscale)">Neu anmelden</button>
+          </span>
         </div>
       </div>
 

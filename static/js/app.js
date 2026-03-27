@@ -1211,6 +1211,32 @@ async function toggleTailscaleFromSettings() {
   setTimeout(fetchTailscaleStatus, 2000);
 }
 
+async function reauthTailscale() {
+  const btn = document.getElementById('btn-settings-ts-reauth');
+  const spinner = document.getElementById('settings-ts-spinner');
+  btn.disabled = true;
+  spinner.classList.remove('hidden');
+
+  try {
+    const r = await fetch(`${API}/api/tailscale/reauth`, { method: 'POST' });
+    const d = await r.json();
+    if (d.auth_url) {
+      const authWrap = document.getElementById('settings-ts-auth-wrap');
+      authWrap.classList.remove('hidden');
+      const link = document.getElementById('settings-ts-auth-url');
+      link.href = d.auth_url;
+      link.textContent = d.auth_url;
+    }
+    showToast(d.message || 'Neu-Anmeldung gestartet');
+  } catch(e) {
+    showToast('Tailscale-Fehler');
+  }
+
+  btn.disabled = false;
+  spinner.classList.add('hidden');
+  setTimeout(fetchTailscaleStatus, 3000);
+}
+
 function toggleSettingsTsSetup() {
   const guide = document.getElementById('settings-ts-setup-guide');
   const btn = document.getElementById('btn-settings-ts-setup');
