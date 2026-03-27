@@ -131,40 +131,51 @@ async def tailscale_down():
 @router.post("/reauth")
 async def tailscale_reauth():
     """Force re-authentication (logout + up --force-reauth)."""
-    # Logout first to clear old credentials
-    await _run(["sudo", "tailscale", "logout"], timeout=10)
+    # Step 1: Disconnect cleanly
+    rc, out, err = await _run(["sudo", "tailscale", "down"], timeout=10)
+    logger.info(f"tailscale down: rc={rc} out={out.strip()!r} err={err.strip()!r}")
 
-    # Start tailscale up in background – it blocks until auth completes,
-    # but writes the auth URL to stderr quickly
-    rc, out, err = await _run(
-        ["sudo", "tailscale", "up", "--accept-routes", "--force-reauth"],
-        timeout=10,
+    # Step 2: Logout to clear credentials
+    rc, out, err = await _run(["sudo", "tailscale", "logout"], timeout=10)
+    logger.info(f"tailscale logout: rc={rc} out={out.strip()!r} err={err.strip()!r}")
+
+    # Step 3: Start tailscale up in the background – it blocks until auth
+    # completes, so we fire-and-forget and read the auth URL from status
+    proc = await asyncio.create_subprocess_exec(
+        "sudo", "tailscale", "up", "--accept-routes", "--force-reauth",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
     )
+    logger.info(f"tailscale up --force-reauth started (pid={proc.pid})")
 
-    # Check command output for auth URL
-    combined = out + err
+    # Step 4: Give tailscaled a moment, then poll status for auth URL
     auth_url = None
-    url_match = re.search(r'(https://login\.tailscale\.com/\S+)', combined)
-    if url_match:
-        auth_url = url_match.group(1)
-
-    if auth_url:
-        return {"ok": True, "auth_url": auth_url, "message": "Anmeldung erforderlich"}
-
-    # Auth URL not in command output – poll status a few times
-    # (tailscaled needs a moment to generate the URL after logout)
-    for _ in range(4):
+    for attempt in range(6):
         await asyncio.sleep(2)
         status_rc, status_out, _ = await _run(["tailscale", "status", "--json"])
         if status_rc == 0:
             try:
                 data = json.loads(status_out)
+                state = data.get("BackendState", "")
                 auth_url = data.get("AuthURL", "")
+                logger.info(f"reauth poll {attempt+1}: state={state} auth_url={auth_url!r}")
                 if auth_url:
                     return {"ok": True, "auth_url": auth_url,
                             "message": "Anmeldung erforderlich"}
             except json.JSONDecodeError:
                 pass
 
-    return {"ok": True, "auth_url": None,
-            "message": "Kein Anmelde-Link erhalten. Versuche den Pi neu zu starten."}
+    # Last resort: try reading from the background process output
+    try:
+        out_bytes, err_bytes = await asyncio.wait_for(proc.communicate(), timeout=2)
+        combined = (out_bytes + err_bytes).decode(errors="replace")
+        url_match = re.search(r'(https://login\.tailscale\.com/\S+)', combined)
+        if url_match:
+            return {"ok": True, "auth_url": url_match.group(1),
+                    "message": "Anmeldung erforderlich"}
+        logger.warning(f"reauth process output: {combined.strip()!r}")
+    except (asyncio.TimeoutError, Exception) as exc:
+        logger.warning(f"reauth process read failed: {exc}")
+
+    return {"ok": False, "auth_url": None,
+            "message": "Kein Anmelde-Link erhalten. Pruefe die Logs mit: sudo journalctl -u greenhouse -n 30"}
