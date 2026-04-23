@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="/icon-192.svg" />
   <title>Gewächshaus Steuerung</title>
   <link rel="stylesheet" href="/css/style.css" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -36,7 +36,7 @@
     <button class="btn-small" onclick="openUpdate()">Auf Updates prüfen</button>
     <span id="update-badge" class="update-badge hidden">Neu</span>
     <a href="/trend.html" class="btn-small" title="Trendanalyse">Trends</a>
-    <button class="btn-icon" onclick="openSettings()" title="Einstellungen">&#9881;</button>
+    <button class="btn-icon" onclick="openSettings()" title="Einstellungen" aria-label="Einstellungen">&#9881;</button>
   </div>
 </header>
 
@@ -102,9 +102,15 @@
 
     <!-- Fan gauge card -->
     <div class="card fan-card">
-      <div class="card-label">Lüfter</div>
+      <div class="card-label">Lüfter
+        <label class="toggle-switch" data-tooltip="Gesamte Lüfterregelung ein- oder ausschalten. Bei 'Aus' wird der Lüfter sofort gestoppt, das Programm läuft weiter." aria-label="Lüfterregelung ein/aus">
+          <input type="checkbox" id="regulation-toggle" checked onchange="toggleRegulation(this.checked)" aria-label="Lüfterregelung ein/aus" />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
       <div class="gauge-container">
-        <svg viewBox="0 0 200 200" class="gauge-svg">
+        <svg viewBox="0 0 200 200" class="gauge-svg" role="img" aria-label="Lüftergeschwindigkeit Anzeige">
+          <title>Lüftergeschwindigkeit</title>
           <path class="gauge-bg"    id="gauge-bg-path"   />
           <path class="gauge-fill"  id="gauge-fill-path" />
           <text x="100" y="112" class="gauge-text" id="gauge-text">0%</text>
@@ -116,11 +122,13 @@
         <button class="btn btn-secondary" id="btn-manual" onclick="openManual()">Manuell</button>
       </div>
       <div id="manual-slider-wrap" class="manual-slider hidden">
-        <label>Geschwindigkeit: <span id="manual-speed-label">0%</span></label>
+        <label for="manual-speed">Geschwindigkeit: <span id="manual-speed-label">0%</span></label>
         <input type="range" id="manual-speed" min="0" max="100" value="0"
+               aria-label="Manuelle Lüftergeschwindigkeit"
                oninput="document.getElementById('manual-speed-label').textContent=this.value+'%'"
                onchange="setManualSpeed(this.value/100)" />
       </div>
+      <div class="regulation-badge">Regelung deaktiviert</div>
     </div>
 
     <!-- Target settings card -->
@@ -128,7 +136,7 @@
       <div class="card-label">Regelung</div>
 
       <div class="control-row" data-tooltip="Zieltemperatur im Gewächshaus. Der Lüfter läuft, wenn die Innentemperatur diesen Wert überschreitet und es draußen kühler ist.">
-        <label>Ziel-Temperatur</label>
+        <label for="target-temp">Ziel-Temperatur</label>
         <div class="input-group">
           <input type="text" inputmode="decimal" id="target-temp" placeholder="25,0" />
           <span class="unit">°C</span>
@@ -136,7 +144,7 @@
       </div>
 
       <div class="control-row" data-tooltip="Ziel-Luftfeuchtigkeit im Gewächshaus. Der Lüfter läuft, wenn die Innenfeuchtigkeit diesen Wert überschreitet und es draußen trockener ist.">
-        <label>Ziel-Feuchtigkeit</label>
+        <label for="target-hum">Ziel-Feuchtigkeit</label>
         <div class="input-group">
           <input type="number" id="target-hum" min="0" max="100" step="1" />
           <span class="unit">%</span>
@@ -144,7 +152,7 @@
       </div>
 
       <div class="control-row" data-tooltip="Regelungsmodus: &#39;oder&#39; = Lüfter läuft wenn eine Bedingung erfüllt ist. &#39;und&#39; = beide Bedingungen müssen gleichzeitig erfüllt sein.">
-        <label>Modus</label>
+        <label for="control-mode">Modus</label>
         <select id="control-mode">
           <option value="combined_or">Kühlen oder Entfeuchten</option>
           <option value="combined_and">Kühlen und Entfeuchten</option>
@@ -154,7 +162,7 @@
       </div>
 
       <div class="control-row" data-tooltip="Temperaturdifferenz zur Zieltemperatur, bei der der Lüfter die maximale Drehzahl erreicht. Kleiner Wert = empfindlichere Regelung.">
-        <label>Temp.-Regelbereich</label>
+        <label for="temp-range">Temp.-Regelbereich</label>
         <div class="input-group">
           <input type="text" inputmode="decimal" id="temp-range" placeholder="5,0" />
           <span class="unit">°C</span>
@@ -162,7 +170,7 @@
       </div>
 
       <div class="control-row" data-tooltip="Feuchtigkeitsdifferenz zum Zielwert, bei der der Lüfter die maximale Drehzahl erreicht. Kleiner Wert = empfindlichere Regelung.">
-        <label>Feuchte-Regelbereich</label>
+        <label for="hum-range">Feuchte-Regelbereich</label>
         <div class="input-group">
           <input type="number" id="hum-range" min="1" max="50" step="1" />
           <span class="unit">%</span>
@@ -180,7 +188,7 @@
       </div>
 
       <div class="control-row" data-tooltip="Totzone (Hysterese): Der Lüfter startet erst, wenn der berechnete Sollwert diese Schwelle überschreitet. Einmal gestartet, läuft er bis die Bedingung komplett entfällt. Verhindert häufiges Ein-/Ausschalten.">
-        <label>Totzone</label>
+        <label for="fan-deadband">Totzone</label>
         <div class="input-group">
           <input type="text" inputmode="decimal" id="fan-deadband" placeholder="10" />
           <span class="unit">%</span>
@@ -188,7 +196,7 @@
       </div>
 
       <div class="control-row" data-tooltip="Frostschutz: Der Lüfter wird komplett abgeschaltet, wenn die Innentemperatur unter diesen Wert fällt.">
-        <label>Min. Temperatur</label>
+        <label for="fan-min-temp">Min. Temperatur</label>
         <div class="input-group">
           <input type="text" inputmode="decimal" id="fan-min-temp" placeholder="5,0" />
           <span class="unit">°C</span>
@@ -237,80 +245,8 @@
     </div>
   </section>
 
-  <!-- Timelapse -->
-  <section class="timelapse-grid">
-
-    <div class="card timelapse-card">
-      <div class="card-label">Timelapse</div>
-
-      <div class="tl-status">
-        <span id="tl-status-dot" class="status-dot"></span>
-        <span id="tl-status-text">Inaktiv</span>
-        <span id="tl-frame-count" class="tl-frames"></span>
-      </div>
-
-      <div class="control-row" data-tooltip="Standbild: ein JPEG pro Intervall. Kurzer Clip: ein kurzes MP4-Video pro Intervall.">
-        <label>Aufnahmemodus</label>
-        <select id="tl-capture-mode" onchange="updateCaptureModeUI()">
-          <option value="still">Standbild (JPEG)</option>
-          <option value="clip">Kurzer Clip (MP4)</option>
-        </select>
-      </div>
-      <div id="clip-options" class="hidden">
-        <div class="control-row" data-tooltip="Länge des aufgezeichneten Clips in Sekunden. In diesem Abstand wird jeweils ein Clip erstellt.">
-          <label>Clip-Dauer</label>
-          <div class="input-group">
-            <input type="number" id="tl-clip-duration" min="1" max="60" step="1" value="5" />
-            <span class="unit">s</span>
-          </div>
-        </div>
-      </div>
-      <div class="control-row" data-tooltip="Zeitabstand zwischen zwei Timelapse-Aufnahmen in Stunden. Z. B. 0.5 = alle 30 Minuten ein Bild.">
-        <label>Intervall (Stunden)</label>
-        <input type="text" inputmode="decimal" id="tl-interval" placeholder="0,0014" />
-      </div>
-      <div class="control-row" data-tooltip="Kamera für die Timelapse-Aufnahmen auswählen. Mit dem Pfeil-Button werden angeschlossene Kameras neu gesucht.">
-        <label>Kamera</label>
-        <div class="cam-select-wrap">
-          <select id="tl-cam-idx" onchange="loadResolutions(this.value)">
-            <option value="0">Kamera 0</option>
-          </select>
-          <button class="btn-small" onclick="loadCameras()" title="Kameras suchen">&#8635;</button>
-        </div>
-      </div>
-      <div class="control-row" data-tooltip="Aufnahmeauflösung. Nur von der Kamera unterstützte Auflösungen werden angezeigt. 'Kamera Standard' = Kamera wählt selbst.">
-        <label>Auflösung</label>
-        <select id="tl-resolution" onchange="loadFps(document.getElementById('tl-cam-idx').value, this.value)">
-          <option value="0x0">Kamera Standard</option>
-        </select>
-      </div>
-      <div class="control-row" data-tooltip="Bildrate der Kameraaufnahme. Zeigt nur die Werte die die Kamera bei der gewählten Auflösung unterstützt.">
-        <label>Aufnahme-FPS</label>
-        <select id="tl-clip-fps">
-          <option value="10">10 fps</option>
-        </select>
-      </div>
-
-      <div class="btn-row">
-        <button class="btn"           id="btn-tl-start" onclick="startTimelapse()">Starten</button>
-        <button class="btn btn-danger" id="btn-tl-stop"  onclick="stopTimelapse()" disabled>Stoppen</button>
-      </div>
-
-      <div class="card-label" style="margin-top:1rem">Aufnahmen</div>
-      <div id="session-list" class="session-list"></div>
-    </div>
-
-    <div class="card camera-card">
-      <div class="card-label">Kamera-Vorschau
-        <button class="btn-small" onclick="refreshPreview()">&#8635;</button>
-      </div>
-      <div class="preview-wrap">
-        <img id="camera-preview" src="" alt="Kein Bild" class="camera-img" />
-        <div id="preview-placeholder" class="preview-placeholder">Kamera nicht verfügbar</div>
-      </div>
-    </div>
-
-  </section>
+  <!-- Timelapse / Cameras (dynamically generated per camera) -->
+  <div id="timelapse-container"></div>
 
 </main>
 
@@ -320,11 +256,11 @@
 <!-- ================================================================
      UPDATE MODAL
 ================================================================ -->
-<div id="update-overlay" class="overlay hidden" onclick="closeUpdate(event)">
+<div id="update-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="update-title" onclick="closeUpdate(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-header">
-      <h2>Software-Update</h2>
-      <button class="btn-icon" onclick="closeUpdate()">&#10005;</button>
+      <h2 id="update-title">Software-Update</h2>
+      <button class="btn-icon" onclick="closeUpdate()" aria-label="Schließen">&#10005;</button>
     </div>
     <div class="modal-body">
       <div class="update-info">
@@ -372,11 +308,11 @@
   </div>
 </div>
 
-<div id="settings-overlay" class="overlay hidden" onclick="closeSettings(event)">
+<div id="settings-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title" onclick="closeSettings(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-header">
-      <h2>Einstellungen</h2>
-      <button class="btn-icon" onclick="closeSettings()">&#10005;</button>
+      <h2 id="settings-title">Einstellungen</h2>
+      <button class="btn-icon" onclick="closeSettings()" aria-label="Schließen">&#10005;</button>
     </div>
     <div class="modal-body">
 
@@ -384,11 +320,11 @@
       <p class="hint">MAC-Adressen der Sensoren (Format: AA:BB:CC:DD:EE:FF)</p>
 
       <div class="control-row" data-tooltip="Bluetooth-MAC-Adresse des SwitchBot-Sensors im Inneren des Gewächshauses. Über 'Sensoren suchen' automatisch ermitteln.">
-        <label>Innen-Sensor MAC</label>
+        <label for="inside-mac">Innen-Sensor MAC</label>
         <input type="text" id="inside-mac" placeholder="AA:BB:CC:DD:EE:FF" class="mac-input" />
       </div>
       <div class="control-row" data-tooltip="Bluetooth-MAC-Adresse des SwitchBot-Sensors außerhalb des Gewächshauses. Über 'Sensoren suchen' automatisch ermitteln.">
-        <label>Außen-Sensor MAC</label>
+        <label for="outside-mac">Außen-Sensor MAC</label>
         <input type="text" id="outside-mac" placeholder="AA:BB:CC:DD:EE:FF" class="mac-input" />
       </div>
 
@@ -399,21 +335,27 @@
 
       <h3>GPIO / Hardware</h3>
       <div class="control-row" data-tooltip="BCM-Nummer des GPIO-Pins am Raspberry Pi, an dem der Lüfter über den MOSFET angeschlossen ist. Standard: GPIO 18.">
-        <label>Lüfter GPIO-Pin (BCM)</label>
+        <label for="fan-gpio">Lüfter GPIO-Pin (BCM)</label>
         <input type="number" id="fan-gpio" min="1" max="27" value="18" />
       </div>
       <div class="control-row" data-tooltip="Pause zwischen zwei Bluetooth-Scans in Sekunden. Kürzeres Intervall = aktuellere Sensordaten, aber höherer CPU-Verbrauch.">
-        <label>BLE Scan-Intervall (s)</label>
+        <label for="ble-interval">BLE Scan-Intervall (s)</label>
         <input type="number" id="ble-interval" min="10" max="300" value="30" />
       </div>
       <div class="control-row" data-tooltip="Dauer eines einzelnen Bluetooth-Scans in Sekunden. Längere Dauer erhöht die Chance, Sensoren zu empfangen.">
-        <label>BLE Scan-Dauer (s)</label>
+        <label for="ble-duration">BLE Scan-Dauer (s)</label>
         <input type="number" id="ble-duration" min="5" max="30" value="10" />
+      </div>
+
+      <h3>Kameras</h3>
+      <div class="control-row" data-tooltip="Anzahl der angeschlossenen Kameras. Jede Kamera bekommt eine eigene Timelapse- und Vorschau-Sektion.">
+        <label for="camera-count">Anzahl Kameras</label>
+        <input type="number" id="camera-count" min="1" max="4" value="1" />
       </div>
 
       <h3>Timelapse</h3>
       <div class="control-row" data-tooltip="Ordner in dem Timelapse-Aufnahmen und Videos gespeichert werden.">
-        <label>Speicherpfad</label>
+        <label for="timelapse-path">Speicherpfad</label>
         <div style="display:flex;gap:.3rem;align-items:center;flex:1;max-width:220px">
           <input type="text" id="timelapse-path" placeholder="timelapse" style="width:100%" />
           <button class="btn-small" onclick="openFolderPicker()" title="Ordner auswählen">&#128193;</button>
@@ -432,7 +374,7 @@
 
       <h3>Anzeige</h3>
       <div class="control-row" data-tooltip="Wartezeit bevor ein Tooltip erscheint. 0 = sofort anzeigen.">
-        <label>Tooltip-Verzögerung</label>
+        <label for="tooltip-delay">Tooltip-Verzögerung</label>
         <div class="input-group">
           <input type="number" id="tooltip-delay" min="0" max="3000" step="100" value="600" />
           <span class="unit">ms</span>
@@ -441,7 +383,7 @@
 
       <h3>Updates</h3>
       <div class="control-row" data-tooltip="Automatische Prüfung auf neue Software-Versionen alle N Tage. 0 = automatische Prüfung deaktiviert, nur manuell per Button.">
-        <label>Automatisch prüfen (Tage, 0 = aus)</label>
+        <label for="update-interval-days">Automatisch prüfen (Tage, 0 = aus)</label>
         <input type="number" id="update-interval-days" min="0" max="365" step="1" value="7" />
       </div>
 
@@ -506,7 +448,7 @@
         <p style="margin:0 0 .4rem;font-weight:600">Mit Auth-Key verbinden</p>
         <p class="hint" style="margin:0 0 .4rem">Key erstellen unter: <a href="https://login.tailscale.com/admin/settings/keys" target="_blank" style="color:var(--accent)">Tailscale Admin &rarr; Keys</a></p>
         <div style="display:flex;gap:.4rem;align-items:center">
-          <input type="text" id="ts-authkey-input" placeholder="tskey-auth-..." style="flex:1;font-size:.85rem;padding:.4rem .6rem;border-radius:4px;border:1px solid var(--border);background:var(--bg1);color:var(--text1)">
+          <input type="text" id="ts-authkey-input" placeholder="tskey-auth-..." style="flex:1;font-size:.85rem;padding:.4rem .6rem;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text)">
           <button class="btn" style="background:var(--accent);color:#fff;padding:.4rem .8rem;white-space:nowrap" onclick="submitTsAuthKey()">Verbinden</button>
         </div>
       </div>
@@ -550,11 +492,11 @@
 <!-- ================================================================
      WIFI MODAL
 ================================================================ -->
-<div id="wifi-overlay" class="overlay hidden" onclick="closeWifi(event)">
+<div id="wifi-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="wifi-title" onclick="closeWifi(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-header">
-      <h2>WLAN-Netzwerk</h2>
-      <button class="btn-icon" onclick="closeWifi()">&#10005;</button>
+      <h2 id="wifi-title">WLAN-Netzwerk</h2>
+      <button class="btn-icon" onclick="closeWifi()" aria-label="Schließen">&#10005;</button>
     </div>
     <div class="modal-body">
 
@@ -613,16 +555,16 @@
   </div>
 </div>
 
-<div id="toast" class="toast hidden"></div>
+<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
 <!-- ================================================================
      FOLDER PICKER MODAL
 ================================================================ -->
-<div id="folder-picker-overlay" class="overlay hidden" onclick="closeFolderPicker(event)">
+<div id="folder-picker-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="folder-picker-title" onclick="closeFolderPicker(event)">
   <div class="modal" style="width:min(520px,95vw)" onclick="event.stopPropagation()">
     <div class="modal-header">
-      <h2>Ordner auswählen</h2>
-      <button class="btn-icon" onclick="closeFolderPicker()">&#10005;</button>
+      <h2 id="folder-picker-title">Ordner auswählen</h2>
+      <button class="btn-icon" onclick="closeFolderPicker()" aria-label="Schließen">&#10005;</button>
     </div>
     <div class="modal-body">
 
@@ -650,11 +592,11 @@
 <!-- ================================================================
      GALLERY MODAL
 ================================================================ -->
-<div id="gallery-overlay" class="overlay hidden" onclick="closeGallery(event)">
+<div id="gallery-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="gallery-title" onclick="closeGallery(event)">
   <div class="modal" style="width:min(700px,95vw)" onclick="event.stopPropagation()">
     <div class="modal-header">
       <h2 id="gallery-title">Aufnahmen</h2>
-      <button class="btn-icon" onclick="closeGallery()">&#10005;</button>
+      <button class="btn-icon" onclick="closeGallery()" aria-label="Schließen">&#10005;</button>
     </div>
     <div class="modal-body">
       <div id="gallery-grid" class="gallery-grid"></div>
@@ -664,9 +606,9 @@
 
 <!-- Lightbox -->
 <div id="lightbox-overlay" class="overlay hidden" onclick="closeLightbox()">
-  <button class="lightbox-close" onclick="closeLightbox()">&#10005;</button>
-  <button class="lightbox-btn" id="lightbox-prev" onclick="event.stopPropagation();lightboxNav(-1)">&#8249;</button>
-  <button class="lightbox-btn" id="lightbox-next" onclick="event.stopPropagation();lightboxNav(1)">&#8250;</button>
+  <button class="lightbox-close" onclick="closeLightbox()" aria-label="Schließen">&#10005;</button>
+  <button class="lightbox-btn" id="lightbox-prev" onclick="event.stopPropagation();lightboxNav(-1)" aria-label="Vorheriges Bild">&#8249;</button>
+  <button class="lightbox-btn" id="lightbox-next" onclick="event.stopPropagation();lightboxNav(1)" aria-label="Nächstes Bild">&#8250;</button>
   <div class="lightbox-inner" onclick="event.stopPropagation()">
     <img id="lightbox-img" src="" alt="" class="hidden" style="max-width:90vw;max-height:85vh;border-radius:6px;object-fit:contain">
     <video id="lightbox-video" controls class="hidden" style="max-width:90vw;max-height:85vh;border-radius:6px"></video>

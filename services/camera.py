@@ -36,14 +36,19 @@ COMMON_RESOLUTIONS = [
 
 
 class CameraService:
-    def __init__(self):
-        self._frames_dir = Path("timelapse/frames")
-        self._output_dir = Path("timelapse/output")
+    def __init__(self, camera_id: int = 0):
+        self._camera_id: int = camera_id
+        self._frames_dir = Path(f"timelapse/cam{camera_id}/frames")
+        self._output_dir = Path(f"timelapse/cam{camera_id}/output")
         self._camera_index: int = 0
         self._capture_width: int = 0
         self._capture_height: int = 0
         self._session: str | None = None
         self._frame_count: int = 0
+
+    @property
+    def camera_id(self) -> int:
+        return self._camera_id
 
     def setup(
         self,
@@ -66,7 +71,7 @@ class CameraService:
     # ------------------------------------------------------------------
 
     def start_session(self, name: str | None = None) -> str:
-        self._session = name or datetime.now().strftime("%Y%m%d_%H%M%S")
+        self._session = name or f"cam{self._camera_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         self._frame_count = 0
         session_dir = self._frames_dir / self._session
         session_dir.mkdir(parents=True, exist_ok=True)
@@ -119,7 +124,7 @@ class CameraService:
             logger.error("Failed to read frame from camera")
             return None
 
-        filename = session_dir / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.jpg"
+        filename = session_dir / f"cam{self._camera_id}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.jpg"
         cv2.imwrite(str(filename), frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
         self._frame_count += 1
         logger.debug(f"Frame captured → {filename.name}")
@@ -144,7 +149,7 @@ class CameraService:
 
         w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        clip_path = session_dir / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
+        clip_path = session_dir / f"cam{self._camera_id}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
 
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         out = cv2.VideoWriter(str(clip_path), fourcc, float(clip_fps), (w, h))

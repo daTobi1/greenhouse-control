@@ -39,6 +39,8 @@ DEFAULT_SETTINGS = {
     "capture_mode": "still",     # still | clip
     "clip_duration": 5,          # seconds per clip
     "clip_fps": 10,              # fps of recorded clip
+    "regulation_enabled": True,  # central on/off for fan regulation
+    "camera_count": 1,           # number of camera slots (1-4)
 }
 
 

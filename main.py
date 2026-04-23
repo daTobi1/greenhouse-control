@@ -27,15 +27,27 @@ async def lifespan(app: FastAPI):
     # Read all settings once
     settings = await state.db.get_all_settings()
 
-    # Camera directories (use configured path)
+    # Camera instances (one per configured camera slot)
     tl_path = settings.get("timelapse_path") or "timelapse"
-    state.camera_service.setup(
-        frames_dir=f"{tl_path}/frames",
-        output_dir=f"{tl_path}/output",
-        camera_index=int(settings.get("camera_index") or 0),
-        capture_width=int(settings.get("camera_capture_width") or 0),
-        capture_height=int(settings.get("camera_capture_height") or 0),
-    )
+    camera_count = int(settings.get("camera_count", 1))
+    for i in range(camera_count):
+        cam = state.get_camera(i)
+        # Per-camera settings, with fallback to legacy keys for camera 0
+        if i == 0:
+            dev_idx = int(settings.get("cam_0_device_index", settings.get("camera_index", 0)))
+            cap_w   = int(settings.get("cam_0_capture_width", settings.get("camera_capture_width", 0)))
+            cap_h   = int(settings.get("cam_0_capture_height", settings.get("camera_capture_height", 0)))
+        else:
+            dev_idx = int(settings.get(f"cam_{i}_device_index", i))
+            cap_w   = int(settings.get(f"cam_{i}_capture_width", 0))
+            cap_h   = int(settings.get(f"cam_{i}_capture_height", 0))
+        cam.setup(
+            frames_dir=f"{tl_path}/cam{i}/frames",
+            output_dir=f"{tl_path}/cam{i}/output",
+            camera_index=dev_idx,
+            capture_width=cap_w,
+            capture_height=cap_h,
+        )
 
     # Fan: read GPIO pin from DB and initialise
     gpio_pin = int(settings.get("fan_gpio_pin") or 18)
@@ -46,7 +58,6 @@ async def lifespan(app: FastAPI):
     _scheduler = Scheduler(
         switchbot=state.switchbot_service,
         fan_controller=state.fan_controller,
-        camera_service=state.camera_service,
         db=state.db,
     )
     await _scheduler.start()

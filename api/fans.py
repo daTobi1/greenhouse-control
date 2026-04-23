@@ -15,12 +15,13 @@ async def get_status():
     """Current fan speed and control mode."""
     settings = await state.db.get_all_settings()
     return {
-        "speed":           state.fan_controller.current_speed,
-        "speed_percent":   round(state.fan_controller.current_speed * 100, 1),
-        "manual_override": settings.get("fan_manual_override", False),
-        "manual_speed":    settings.get("fan_manual_speed", 0.0),
-        "control_mode":    settings.get("control_mode", "combined"),
-        "mock_mode":       state.fan_controller._mock,
+        "speed":              state.fan_controller.current_speed,
+        "speed_percent":      round(state.fan_controller.current_speed * 100, 1),
+        "manual_override":    settings.get("fan_manual_override", False),
+        "manual_speed":       settings.get("fan_manual_speed", 0.0),
+        "control_mode":       settings.get("control_mode", "combined"),
+        "mock_mode":          state.fan_controller._mock,
+        "regulation_enabled": settings.get("regulation_enabled", True),
     }
 
 

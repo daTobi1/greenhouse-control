@@ -12,29 +12,32 @@ logger = logging.getLogger(__name__)
 
 
 class Scheduler:
-    def __init__(self, switchbot, fan_controller, camera_service, db):
+    def __init__(self, switchbot, fan_controller, db):
         self._sb   = switchbot
         self._fan  = fan_controller
-        self._cam  = camera_service
         self._db   = db
         self._tasks: list[asyncio.Task] = []
+        self._tl_tasks: dict[int, asyncio.Task] = {}  # per-camera timelapse tasks
         self._running = False
 
     async def start(self):
         self._running = True
         self._tasks = [
-            asyncio.create_task(self._ble_loop(),       name="ble_scan"),
-            asyncio.create_task(self._fan_loop(),       name="fan_control"),
-            asyncio.create_task(self._timelapse_loop(), name="timelapse"),
-            asyncio.create_task(self._log_loop(),       name="sensor_log"),
+            asyncio.create_task(self._ble_loop(),             name="ble_scan"),
+            asyncio.create_task(self._fan_loop(),             name="fan_control"),
+            asyncio.create_task(self._timelapse_manager(),    name="timelapse_mgr"),
+            asyncio.create_task(self._log_loop(),             name="sensor_log"),
         ]
         logger.info("Scheduler started")
 
     async def stop(self):
         self._running = False
+        for t in self._tl_tasks.values():
+            t.cancel()
         for t in self._tasks:
             t.cancel()
-        await asyncio.gather(*self._tasks, return_exceptions=True)
+        all_tasks = self._tasks + list(self._tl_tasks.values())
+        await asyncio.gather(*all_tasks, return_exceptions=True)
         logger.info("Scheduler stopped")
 
     # ------------------------------------------------------------------
@@ -81,6 +84,18 @@ class Scheduler:
                     self._fan.setup(gpio_pin)
                     configured_pin = gpio_pin
 
+                regulation_enabled = settings.get("regulation_enabled", True)
+
+                if not regulation_enabled:
+                    self._fan.set_speed(0.0)
+                    speed = 0.0
+                    reason = "disabled"
+                    if speed != last_logged_speed:
+                        await self._db.log_fan_event(speed, reason)
+                        last_logged_speed = speed
+                    await asyncio.sleep(interval)
+                    continue
+
                 manual_override = settings.get("fan_manual_override", False)
 
                 if manual_override:
@@ -112,48 +127,93 @@ class Scheduler:
                 await asyncio.sleep(10)
 
     # ------------------------------------------------------------------
-    # Timelapse loop
+    # Timelapse manager – spawns/removes per-camera loops dynamically
     # ------------------------------------------------------------------
 
-    async def _timelapse_loop(self):
+    async def _timelapse_manager(self):
+        """Check camera_count periodically and manage per-camera loops."""
+        while self._running:
+            try:
+                settings = await self._db.get_all_settings()
+                camera_count = int(settings.get("camera_count", 1))
+
+                # Start loops for new cameras
+                for i in range(camera_count):
+                    if i not in self._tl_tasks or self._tl_tasks[i].done():
+                        cam = _state.get_camera(i)
+                        self._tl_tasks[i] = asyncio.create_task(
+                            self._timelapse_loop(i), name=f"timelapse_cam{i}"
+                        )
+                        logger.info(f"Timelapse loop started for camera {i}")
+
+                # Cancel loops for removed cameras
+                for i in list(self._tl_tasks):
+                    if i >= camera_count:
+                        self._tl_tasks[i].cancel()
+                        del self._tl_tasks[i]
+                        logger.info(f"Timelapse loop stopped for camera {i}")
+
+                await asyncio.sleep(5)
+
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                logger.error(f"Timelapse manager error: {exc}")
+                await asyncio.sleep(10)
+
+    async def _timelapse_loop(self, cam_idx: int):
+        """Timelapse capture loop for a single camera slot."""
         last_cam_config = None
         while self._running:
             try:
                 settings     = await self._db.get_all_settings()
-                active       = settings.get("timelapse_active", False)
-                interval     = float(settings.get("timelapse_interval") or 300)
                 tl_path      = settings.get("timelapse_path") or "timelapse"
-                cam_idx      = int(settings.get("camera_index") or 0)
-                cap_w        = int(settings.get("camera_capture_width") or 0)
-                cap_h        = int(settings.get("camera_capture_height") or 0)
-                capture_mode = settings.get("capture_mode", "still")
-                clip_duration= float(settings.get("clip_duration") or 5)
-                clip_fps     = int(settings.get("clip_fps") or 10)
+                cam          = _state.get_camera(cam_idx)
+
+                # Per-camera settings with fallback to legacy keys for cam 0
+                if cam_idx == 0:
+                    active       = settings.get("cam_0_timelapse_active", settings.get("timelapse_active", False))
+                    interval     = float(settings.get("cam_0_timelapse_interval", settings.get("timelapse_interval", 300)))
+                    dev_idx      = int(settings.get("cam_0_device_index", settings.get("camera_index", 0)))
+                    cap_w        = int(settings.get("cam_0_capture_width", settings.get("camera_capture_width", 0)))
+                    cap_h        = int(settings.get("cam_0_capture_height", settings.get("camera_capture_height", 0)))
+                    capture_mode = settings.get("cam_0_capture_mode", settings.get("capture_mode", "still"))
+                    clip_duration= float(settings.get("cam_0_clip_duration", settings.get("clip_duration", 5)))
+                    clip_fps     = int(settings.get("cam_0_clip_fps", settings.get("clip_fps", 10)))
+                else:
+                    active       = settings.get(f"cam_{cam_idx}_timelapse_active", False)
+                    interval     = float(settings.get(f"cam_{cam_idx}_timelapse_interval", 300))
+                    dev_idx      = int(settings.get(f"cam_{cam_idx}_device_index", cam_idx))
+                    cap_w        = int(settings.get(f"cam_{cam_idx}_capture_width", 0))
+                    cap_h        = int(settings.get(f"cam_{cam_idx}_capture_height", 0))
+                    capture_mode = settings.get(f"cam_{cam_idx}_capture_mode", "still")
+                    clip_duration= float(settings.get(f"cam_{cam_idx}_clip_duration", 5))
+                    clip_fps     = int(settings.get(f"cam_{cam_idx}_clip_fps", 10))
 
                 # Setup nur bei Konfigurationsänderung
-                cam_config = (tl_path, cam_idx, cap_w, cap_h)
+                cam_config = (tl_path, dev_idx, cap_w, cap_h)
                 if cam_config != last_cam_config:
-                    self._cam.setup(
-                        frames_dir=f"{tl_path}/frames",
-                        output_dir=f"{tl_path}/output",
-                        camera_index=cam_idx,
+                    cam.setup(
+                        frames_dir=f"{tl_path}/cam{cam_idx}/frames",
+                        output_dir=f"{tl_path}/cam{cam_idx}/output",
+                        camera_index=dev_idx,
                         capture_width=cap_w,
                         capture_height=cap_h,
                     )
                     last_cam_config = cam_config
 
                 if active:
-                    if not self._cam.is_capturing:
-                        self._cam.start_session()
+                    if not cam.is_capturing:
+                        cam.start_session()
                     if capture_mode == "clip":
                         await asyncio.to_thread(
-                            self._cam.capture_clip, clip_duration, clip_fps
+                            cam.capture_clip, clip_duration, clip_fps
                         )
                     else:
-                        await asyncio.to_thread(self._cam.capture_frame)
+                        await asyncio.to_thread(cam.capture_frame)
                 else:
-                    if self._cam.is_capturing:
-                        self._cam.stop_session()
+                    if cam.is_capturing:
+                        cam.stop_session()
 
                 # Wait for interval OR wake event (whichever comes first)
                 _state.timelapse_wake.clear()
@@ -167,7 +227,7 @@ class Scheduler:
             except asyncio.CancelledError:
                 break
             except Exception as exc:
-                logger.error(f"Timelapse loop error: {exc}")
+                logger.error(f"Timelapse loop cam{cam_idx} error: {exc}")
                 await asyncio.sleep(60)
 
     # ------------------------------------------------------------------

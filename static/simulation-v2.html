@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d1117" />
+  <title>Gewächshaus Steuerung – Design V2</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+/* ============================================================
+   V2 – Refined Dark Theme (same palette, better execution)
+============================================================ */
+:root {
+  --bg:        #0d1117;
+  --bg2:       #161b22;
+  --bg3:       #21262d;
+  --card:      #161b22;
+  --border:    #30363d;
+  --border-subtle: #272d33;
+  --accent:    #58a6ff;
+  --accent2:   #79c0ff;
+  --accent3:   #1f6feb;
+  --accent-glow: rgba(88,166,255,.12);
+  --danger:    #f85149;
+  --danger-muted: #7b1a18;
+  --warn:      #e3b341;
+  --text:      #e6edf3;
+  --text2:     #b1bac4;
+  --text3:     #8b949e;
+
+  /* Warm/cool for inside/outside differentiation */
+  --warm:      #f0883e;
+  --warm-subtle: rgba(240,136,62,.08);
+  --cool:      #58a6ff;
+  --cool-subtle: rgba(88,166,255,.08);
+
+  --font:      'DM Sans', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  --radius:    10px;
+  --radius-md: 6px;
+  --radius-sm: 4px;
+  --shadow:    0 2px 16px rgba(0,0,0,.6);
+  --shadow-hover: 0 6px 28px rgba(0,0,0,.7);
+  --tr-fast:   .15s;
+  --tr-normal: .2s;
+
+  --trend-up:    var(--danger);
+  --trend-down:  var(--accent);
+  --trend-stable:var(--text3);
+  --overlay-bg:  rgba(0,0,0,.7);
+  --toggle-knob: #fff;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 15px; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  min-height: 100vh;
+  padding-bottom: 2.5rem;
+}
+
+/* ============================================================
+   Header – backdrop blur
+============================================================ */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .65rem 1.3rem;
+  background: rgba(22,27,34,.88);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-subtle);
+  position: sticky; top: 0; z-index: 100;
+}
+.header-left { display: flex; align-items: center; gap: .6rem; }
+.logo { font-size: 1.6rem; }
+h1 { font-size: 1.1rem; font-weight: 600; color: var(--accent2); }
+.header-right { display: flex; align-items: center; gap: .5rem; }
+.clock {
+  font-family: var(--font-mono); font-size: .78rem; color: var(--text3);
+  font-variant-numeric: tabular-nums; min-width: 5rem; text-align: right;
+  letter-spacing: .02em;
+}
+
+/* ============================================================
+   Status dots – enhanced glow
+============================================================ */
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--text3);
+  display: inline-block; transition: background .4s, box-shadow .4s;
+}
+.status-dot.ok { background: var(--accent); box-shadow: 0 0 8px rgba(88,166,255,.5); }
+.status-dot.warn { background: var(--warn); box-shadow: 0 0 6px rgba(227,179,65,.4); }
+.status-dot.error { background: var(--danger); box-shadow: 0 0 6px rgba(248,81,73,.4); }
+.status-label { font-size: .72rem; color: var(--text3); margin-right: .3rem; letter-spacing: .03em; }
+.status-label.clickable { cursor: pointer; transition: color var(--tr-fast); }
+.status-label.clickable:hover { color: var(--text); }
+
+/* ============================================================
+   Buttons – micro-interaction
+============================================================ */
+.btn {
+  padding: .45rem 1rem; border: none; border-radius: 6px; background: var(--accent3);
+  color: var(--text); font-family: var(--font); font-size: .85rem; font-weight: 500;
+  cursor: pointer; transition: background .2s, transform var(--tr-fast), box-shadow .2s;
+}
+.btn:hover { background: var(--accent); color: #0d1117; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(88,166,255,.2); }
+.btn:active { transform: translateY(0); }
+.btn:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: none; }
+.btn-secondary { background: var(--bg3); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--border); color: var(--text); transform: translateY(-1px); box-shadow: var(--shadow); }
+.btn-danger { background: var(--danger-muted); }
+.btn-danger:hover { background: var(--danger); box-shadow: 0 4px 14px rgba(248,81,73,.2); }
+
+.btn-icon {
+  background: none; border: none; color: var(--text2); font-size: 1.2rem; cursor: pointer;
+  padding: .4rem .6rem; border-radius: var(--radius-sm);
+  min-width: 36px; min-height: 36px;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: color var(--tr-fast), background var(--tr-fast);
+}
+.btn-icon:hover { background: var(--bg3); color: var(--accent); }
+
+.btn-small {
+  background: var(--bg3); border: 1px solid var(--border); color: var(--text2);
+  border-radius: var(--radius-sm); padding: .3rem .6rem; cursor: pointer;
+  font-family: var(--font); font-size: .8rem; min-height: 28px;
+  transition: background var(--tr-fast), border-color var(--tr-fast);
+}
+.btn-small:hover { background: var(--border); border-color: var(--text3); }
+.btn-row { display: flex; gap: .5rem; margin-top: .5rem; }
+.full-width { width: 100%; margin-top: .8rem; }
+
+/* ============================================================
+   Cards – hover lift + top accent
+============================================================ */
+.card {
+  background: var(--card); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius); padding: 1rem; box-shadow: var(--shadow);
+  transition: border-color var(--tr-normal), box-shadow var(--tr-normal), transform var(--tr-normal);
+  position: relative;
+}
+.card:hover {
+  border-color: var(--border);
+  box-shadow: var(--shadow-hover);
+  transform: translateY(-2px);
+}
+
+/* Top accent line */
+.card::after {
+  content: ''; position: absolute; top: 0; left: 12px; right: 12px;
+  height: 1px; background: transparent; border-radius: 1px;
+  transition: background var(--tr-normal);
+}
+
+.card-label {
+  font-size: .72rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--text3); margin-bottom: .6rem;
+  display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+}
+
+.value-row { display: flex; align-items: flex-end; gap: .4rem; }
+
+.card-value {
+  font-size: 2.6rem; font-weight: 700; color: var(--text); line-height: 1;
+  font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+}
+
+.trend-badge {
+  font-family: var(--font-mono); font-size: .75rem; font-weight: 500;
+  padding: .12rem .4rem; border-radius: 4px; margin-bottom: .25rem;
+  letter-spacing: .02em; white-space: nowrap;
+}
+.trend-up    { color: var(--trend-up);     background: rgba(248,81,73,.1); }
+.trend-down  { color: var(--trend-down);   background: rgba(88,166,255,.1); }
+.trend-stable{ color: var(--trend-stable); background: rgba(139,148,158,.1); }
+
+.card-unit { font-size: 1rem; color: var(--text3); white-space: nowrap; }
+.card-meta {
+  display: flex; justify-content: space-between;
+  font-family: var(--font-mono); font-size: .68rem;
+  color: var(--text3); margin-top: .5rem; letter-spacing: .02em;
+}
+
+/* ============================================================
+   Sensor cards – warm (inside) / cool (outside)
+============================================================ */
+.sensor-card--warm::after { background: linear-gradient(90deg, var(--warm), transparent 80%); }
+.sensor-card--warm .card-label { color: #c87a30; }
+.sensor-card--warm .card-value { color: #fdd9b0; }
+.sensor-card--warm:hover { border-color: rgba(240,136,62,.25); }
+
+.sensor-card--cool::after { background: linear-gradient(90deg, var(--cool), transparent 80%); }
+.sensor-card--cool .card-label { color: #4990c4; }
+.sensor-card--cool .card-value { color: #bdd8f0; }
+.sensor-card--cool:hover { border-color: rgba(88,166,255,.25); }
+
+/* ============================================================
+   Layout
+============================================================ */
+main { max-width: 1400px; margin: 0 auto; padding: 1rem; display: flex; flex-direction: column; gap: 1rem; }
+.sensor-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+.control-grid { display: grid; grid-template-columns: 280px 1fr; gap: 1rem; }
+.charts-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+.timelapse-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+
+/* ============================================================
+   Gauge – glow
+============================================================ */
+.gauge-container { display: flex; justify-content: center; }
+.gauge-svg { width: 180px; height: 180px; }
+.gauge-bg { fill: none; stroke: var(--bg3); stroke-width: 14; stroke-linecap: round; }
+.gauge-fill {
+  fill: none; stroke: var(--accent); stroke-width: 14; stroke-linecap: round;
+  transition: stroke-dasharray .6s ease;
+}
+.gauge-text { font-size: 28px; font-weight: 700; fill: var(--text); text-anchor: middle; dominant-baseline: middle; font-variant-numeric: tabular-nums; }
+.gauge-sub { font-family: var(--font-mono); font-size: 10px; fill: var(--text3); text-anchor: middle; letter-spacing: .12em; text-transform: uppercase; }
+.fan-card::after { background: linear-gradient(90deg, var(--accent), transparent 80%); }
+.fan-controls { display: flex; gap: .5rem; justify-content: center; margin-top: .6rem; }
+.manual-slider { margin-top: .8rem; }
+.manual-slider label { display: block; font-size: .8rem; color: var(--text2); margin-bottom: .3rem; }
+.manual-slider input[type=range] { width: 100%; accent-color: var(--accent); }
+
+/* ============================================================
+   Control inputs – focus glow
+============================================================ */
+.control-row { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .55rem; }
+.control-row label { font-size: .8rem; color: var(--text2); flex: 1; }
+.control-row input[type=number],
+.control-row input[type=text],
+.control-row select {
+  background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+  border-radius: 5px; padding: .28rem .5rem;
+  font-family: var(--font-mono); font-size: .82rem; width: 100px;
+  transition: border-color var(--tr-fast), box-shadow var(--tr-fast);
+}
+.control-row input:focus, .control-row select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+  outline: none;
+}
+.input-group { display: flex; align-items: center; gap: .3rem; }
+.input-group.compact input { width: 60px; }
+.unit { font-family: var(--font-mono); font-size: .75rem; color: var(--text3); }
+
+/* ============================================================
+   Charts
+============================================================ */
+.chart-card { display: flex; flex-direction: column; height: clamp(220px, 30vh, 420px); }
+.chart-card canvas { flex: 1; min-height: 0; }
+.chart-range {
+  background: var(--bg3); border: 1px solid var(--border); color: var(--text2);
+  border-radius: 4px; padding: .1rem .3rem;
+  font-family: var(--font-mono); font-size: .68rem;
+}
+
+/* ============================================================
+   Timelapse
+============================================================ */
+.tl-status { display: flex; align-items: center; gap: .5rem; margin-bottom: .7rem; font-size: .85rem; }
+.tl-frames { margin-left: auto; font-family: var(--font-mono); font-size: .72rem; color: var(--text3); }
+.cam-select-wrap { display: flex; gap: .3rem; align-items: center; }
+.cam-select-wrap select { flex: 1; min-width: 100px; }
+.session-list { display: flex; flex-direction: column; gap: .4rem; max-height: 200px; overflow-y: auto; margin-top: .4rem; }
+.session-item {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--bg3); border-radius: 6px; padding: .4rem .6rem; font-size: .78rem; gap: .4rem;
+  transition: background var(--tr-fast);
+}
+.session-item:hover { background: var(--border); }
+.session-item .session-name { color: var(--text2); flex: 1; font-family: var(--font-mono); font-size: .72rem; }
+.session-item .session-info { color: var(--accent); cursor: pointer; text-decoration: underline dotted; font-size: .75rem; }
+.session-actions { display: flex; gap: .3rem; }
+
+/* ============================================================
+   Camera preview
+============================================================ */
+.camera-card { display: flex; flex-direction: column; }
+.preview-wrap { position: relative; flex: 1; min-height: 200px; }
+.camera-img { width: 100%; border-radius: 6px; display: none; object-fit: contain; }
+.camera-img.loaded { display: block; }
+.preview-placeholder {
+  display: flex; align-items: center; justify-content: center; flex-direction: column; gap: .5rem;
+  height: 100%; min-height: 200px; color: var(--text3); font-size: .85rem;
+  border: 1px dashed var(--border); border-radius: 6px;
+}
+.preview-icon { font-size: 2rem; opacity: .35; }
+
+/* ============================================================
+   Toast
+============================================================ */
+.toast {
+  position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+  background: var(--bg3); border: 1px solid var(--border);
+  color: var(--text); padding: .55rem 1.2rem; border-radius: 20px;
+  font-size: .85rem; z-index: 300; box-shadow: var(--shadow);
+}
+.toast.hidden { display: none; }
+
+/* ============================================================
+   Toggle Switch
+============================================================ */
+.toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; vertical-align: middle; margin-left: .5rem; cursor: pointer; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute; inset: 0; background: var(--bg3);
+  border: 1px solid var(--border); border-radius: 20px;
+  transition: background .2s, border-color .2s, box-shadow .2s;
+}
+.toggle-slider::before {
+  content: ''; position: absolute; width: 18px; height: 18px; left: 2px; bottom: 2px;
+  background: var(--text3); border-radius: 50%;
+  transition: transform .2s, background .2s;
+}
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--accent3); border-color: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); background: var(--toggle-knob); }
+.fan-card.regulation-off .gauge-container,
+.fan-card.regulation-off .fan-controls,
+.fan-card.regulation-off .manual-slider { opacity: .35; pointer-events: none; }
+.fan-card .regulation-badge { display: none; text-align: center; color: var(--text3); font-size: .8rem; margin-top: .4rem; }
+.fan-card.regulation-off .regulation-badge { display: block; }
+
+/* ============================================================
+   Focus states
+============================================================ */
+.btn:focus-visible, .btn-icon:focus-visible, .btn-small:focus-visible,
+input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.toggle-switch input:focus-visible + .toggle-slider { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ============================================================
+   Entrance animation (staggered)
+============================================================ */
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.card { animation: cardIn .4s ease both; }
+.sensor-grid .card:nth-child(1) { animation-delay: 0s; }
+.sensor-grid .card:nth-child(2) { animation-delay: .06s; }
+.sensor-grid .card:nth-child(3) { animation-delay: .12s; }
+.sensor-grid .card:nth-child(4) { animation-delay: .18s; }
+.control-grid .card:nth-child(1) { animation-delay: .22s; }
+.control-grid .card:nth-child(2) { animation-delay: .26s; }
+.charts-grid .card:nth-child(1) { animation-delay: .3s; }
+.charts-grid .card:nth-child(2) { animation-delay: .34s; }
+.charts-grid .card:nth-child(3) { animation-delay: .38s; }
+.timelapse-grid .card:nth-child(1) { animation-delay: .42s; }
+.timelapse-grid .card:nth-child(2) { animation-delay: .46s; }
+
+.tooltip {
+  position: fixed; background: var(--bg3); border: 1px solid var(--border);
+  color: var(--text2); font-size: .75rem; line-height: 1.45; padding: .4rem .65rem;
+  border-radius: 6px; max-width: 260px; z-index: 500; box-shadow: var(--shadow);
+  pointer-events: none; white-space: normal;
+}
+.tooltip.hidden { display: none; }
+.hidden { display: none !important; }
+
+/* ============================================================
+   Responsive
+============================================================ */
+@media (max-width: 1100px) { .sensor-grid { grid-template-columns: repeat(2, 1fr); } .charts-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 700px) { .sensor-grid { grid-template-columns: 1fr 1fr; } .control-grid { grid-template-columns: 1fr; } .charts-grid { grid-template-columns: 1fr; } .timelapse-grid { grid-template-columns: 1fr; } h1 { font-size: .9rem; } }
+@media (max-width: 420px) { .sensor-grid { grid-template-columns: 1fr; } }
+
+.sim-banner {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 9999;
+  background: linear-gradient(135deg, #1f6feb, #58a6ff);
+  color: #fff; text-align: center; padding: .45rem 1rem;
+  font-size: .78rem; font-weight: 600; letter-spacing: .02em;
+}
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <span class="logo">&#9752;</span>
+    <h1>Gewächshaus Steuerung</h1>
+  </div>
+  <div class="header-right">
+    <span class="status-dot ok"></span><span class="status-label">BLE</span>
+    <span class="status-dot ok"></span><span class="status-label">Kamera</span>
+    <span class="status-dot ok"></span><span class="status-label clickable">WLAN</span>
+    <span class="status-dot ok"></span><span class="status-label clickable">VPN</span>
+    <span id="clock" class="clock"></span>
+    <button class="btn-small">Updates</button>
+    <a href="#" class="btn-small">Trends</a>
+    <button class="btn-icon" aria-label="Einstellungen">&#9881;</button>
+  </div>
+</header>
+
+<main>
+  <section class="sensor-grid">
+    <div class="card sensor-card sensor-card--warm">
+      <div class="card-label">Innen &mdash; Temperatur</div>
+      <div class="value-row">
+        <div class="card-value">26,3</div><span class="card-unit">°C</span>
+        <span class="trend-badge trend-up">&#9650; +0,8</span>
+      </div>
+      <div class="card-meta"><span>Bat: 87%</span><span>vor 12s</span></div>
+    </div>
+    <div class="card sensor-card sensor-card--warm">
+      <div class="card-label">Innen &mdash; Feuchtigkeit</div>
+      <div class="value-row">
+        <div class="card-value">62</div><span class="card-unit">%</span>
+        <span class="trend-badge trend-stable">&rarr;</span>
+      </div>
+      <div class="card-meta"><span></span><span>vor 12s</span></div>
+    </div>
+    <div class="card sensor-card sensor-card--cool">
+      <div class="card-label">Außen &mdash; Temperatur</div>
+      <div class="value-row">
+        <div class="card-value">18,7</div><span class="card-unit">°C</span>
+        <span class="trend-badge trend-down">&#9660; -1,2</span>
+      </div>
+      <div class="card-meta"><span>Bat: 92%</span><span>vor 15s</span></div>
+    </div>
+    <div class="card sensor-card sensor-card--cool">
+      <div class="card-label">Außen &mdash; Feuchtigkeit</div>
+      <div class="value-row">
+        <div class="card-value">48</div><span class="card-unit">%</span>
+        <span class="trend-badge trend-down">&#9660; -2,0</span>
+      </div>
+      <div class="card-meta"><span></span><span>vor 15s</span></div>
+    </div>
+  </section>
+
+  <section class="control-grid">
+    <div class="card fan-card">
+      <div class="card-label">Lüfter
+        <label class="toggle-switch" aria-label="Lüfterregelung ein/aus">
+          <input type="checkbox" checked aria-label="Lüfterregelung ein/aus" />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="gauge-container">
+        <svg viewBox="0 0 200 200" class="gauge-svg" role="img" aria-label="Lüftergeschwindigkeit">
+          <title>Lüftergeschwindigkeit</title>
+          <path class="gauge-bg" id="gauge-bg-path" />
+          <path class="gauge-fill" id="gauge-fill-path" />
+          <text x="100" y="112" class="gauge-text" id="gauge-text">42%</text>
+          <text x="100" y="132" class="gauge-sub">Auto</text>
+        </svg>
+      </div>
+      <div class="fan-controls">
+        <button class="btn" style="background:var(--accent3)">Automatik</button>
+        <button class="btn btn-secondary">Manuell</button>
+      </div>
+      <div class="regulation-badge">Regelung deaktiviert</div>
+    </div>
+
+    <div class="card control-card">
+      <div class="card-label">Regelung</div>
+      <div class="control-row"><label for="s-tt">Ziel-Temperatur</label><div class="input-group"><input type="text" id="s-tt" value="25,0" /><span class="unit">°C</span></div></div>
+      <div class="control-row"><label for="s-th">Ziel-Feuchtigkeit</label><div class="input-group"><input type="number" id="s-th" value="65" /><span class="unit">%</span></div></div>
+      <div class="control-row"><label for="s-m">Modus</label><select id="s-m"><option selected>Kühlen oder Entfeuchten</option><option>Kühlen und Entfeuchten</option><option>Nur Kühlen</option><option>Nur Entfeuchten</option></select></div>
+      <div class="control-row"><label for="s-tr">Temp.-Regelbereich</label><div class="input-group"><input type="text" id="s-tr" value="5,0" /><span class="unit">°C</span></div></div>
+      <div class="control-row"><label for="s-hr">Feuchte-Regelbereich</label><div class="input-group"><input type="number" id="s-hr" value="20" /><span class="unit">%</span></div></div>
+      <div class="control-row"><label>Lüfter min / max</label><div class="input-group compact"><input type="text" value="20" /><span>% /</span><input type="text" value="100" /><span class="unit">%</span></div></div>
+      <div class="control-row"><label for="s-db">Totzone</label><div class="input-group"><input type="text" id="s-db" value="10" /><span class="unit">%</span></div></div>
+      <div class="control-row"><label for="s-mt">Min. Temperatur</label><div class="input-group"><input type="text" id="s-mt" value="5,0" /><span class="unit">°C</span></div></div>
+      <button class="btn full-width">Speichern</button>
+    </div>
+  </section>
+
+  <section class="charts-grid">
+    <div class="card chart-card"><div class="card-label">Temperaturverlauf<select class="chart-range"><option>6h</option><option selected>24h</option><option>48h</option><option>7d</option></select></div><canvas id="chart-temp"></canvas></div>
+    <div class="card chart-card"><div class="card-label">Feuchtigkeitsverlauf<select class="chart-range"><option>6h</option><option selected>24h</option><option>48h</option><option>7d</option></select></div><canvas id="chart-hum"></canvas></div>
+    <div class="card chart-card"><div class="card-label">Lüftergeschwindigkeit<select class="chart-range"><option>6h</option><option selected>24h</option><option>48h</option><option>7d</option></select></div><canvas id="chart-fan"></canvas></div>
+  </section>
+
+  <section class="timelapse-grid">
+    <div class="card timelapse-card">
+      <div class="card-label">Timelapse</div>
+      <div class="tl-status"><span class="status-dot ok"></span><span>Aufnahme: cam0_2026-04-23_14-00-00</span><span class="tl-frames">347 Bilder</span></div>
+      <div class="control-row"><label>Aufnahmemodus</label><select><option selected>Standbild (JPEG)</option><option>Kurzer Clip (MP4)</option></select></div>
+      <div class="control-row"><label>Intervall (Stunden)</label><input type="text" value="0,0833" /></div>
+      <div class="control-row"><label>Kamera</label><div class="cam-select-wrap"><select><option>USB-Kamera (Index 0)</option><option>USB-Kamera (Index 2)</option></select><button class="btn-small">&#8635;</button></div></div>
+      <div class="control-row"><label>Auflösung</label><select><option>Kamera Standard</option><option>1920x1080</option><option selected>1280x720</option></select></div>
+      <div class="control-row"><label>Aufnahme-FPS</label><select><option>10</option><option selected>15</option><option>30</option></select></div>
+      <div class="btn-row"><button class="btn" disabled>Starten</button><button class="btn btn-danger">Stoppen</button></div>
+      <div class="card-label" style="margin-top:1rem">Aufnahmen</div>
+      <div class="session-list">
+        <div class="session-item"><span class="session-name">cam0_2026-04-23_14-00-00 ●</span><span class="session-info">347 Bilder</span><div class="session-actions"></div></div>
+        <div class="session-item"><span class="session-name">cam0_2026-04-22_08-00-00</span><span class="session-info">1440 Bilder</span><div class="session-actions"><button class="btn-small" style="color:var(--danger)">&#10005;</button></div></div>
+        <div class="session-item"><span class="session-name">cam0_2026-04-21_06-30-00</span><span class="session-info">960 Bilder</span><div class="session-actions"><button class="btn-small" style="color:var(--danger)">&#10005;</button></div></div>
+      </div>
+    </div>
+    <div class="card camera-card">
+      <div class="card-label">Kamera-Vorschau<button class="btn-small">&#8635;</button></div>
+      <div class="preview-wrap"><div class="preview-placeholder"><span class="preview-icon">&#127909;</span>Kamera nicht verfügbar</div></div>
+    </div>
+  </section>
+</main>
+
+<div class="toast hidden" role="status" aria-live="polite"></div>
+<div class="sim-banner">Design V2 – Vergleiche mit simulation.html (gleiche Palette, bessere Ausführung)</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script>
+function updateClock(){const n=new Date();document.getElementById('clock').textContent=n.toLocaleDateString('de-DE')+'  '+n.toLocaleTimeString('de-DE')}
+setInterval(updateClock,1000);updateClock();
+
+function arcPath(cx,cy,r,s,e){const R=d=>(d-90)*Math.PI/180;return`M ${cx+r*Math.cos(R(s))} ${cy+r*Math.sin(R(s))} A ${r} ${r} 0 ${(e-s)>180?1:0} 1 ${cx+r*Math.cos(R(e))} ${cy+r*Math.sin(R(e))}`}
+const GS=135,GT=270;
+document.getElementById('gauge-bg-path').setAttribute('d',arcPath(100,100,76,GS,GS+GT));
+function setGauge(f){f=Math.max(0,Math.min(1,f));const p=document.getElementById('gauge-fill-path');p.setAttribute('d',f<.001?'':arcPath(100,100,76,GS,GS+f*GT));let c='#58a6ff';if(f>.8)c='#f85149';else if(f>.6)c='#e3b341';p.style.stroke=c;document.getElementById('gauge-text').textContent=Math.round(f*100)+'%'}
+setGauge(.42);
+let _gd=1,_gv=.42;
+setInterval(()=>{_gv+=_gd*(Math.random()*.02);if(_gv>.85)_gd=-1;if(_gv<.1)_gd=1;setGauge(_gv)},2000);
+
+document.querySelector('.toggle-switch input').addEventListener('change',function(){document.querySelector('.fan-card').classList.toggle('regulation-off',!this.checked)});
+
+const CD={type:'line',options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{labels:{color:'#8b949e',boxWidth:10,font:{family:'DM Sans',size:11}}},tooltip:{backgroundColor:'#161b22',borderColor:'#30363d',borderWidth:1,titleFont:{family:'DM Sans'},bodyFont:{family:'JetBrains Mono',size:11},callbacks:{label:c=>c.dataset.label+': '+(c.parsed.y==null?'--':c.parsed.y.toFixed(1).replace('.',','))}}},scales:{x:{ticks:{color:'#8b949e',maxTicksLimit:8,maxRotation:0,font:{family:'JetBrains Mono',size:10}},grid:{color:'#21262d'}},y:{ticks:{color:'#8b949e',font:{family:'JetBrains Mono',size:10},callback:v=>String(v%1===0?v:v.toFixed(1)).replace('.',',')},grid:{color:'#21262d'},grace:'5%'}}}};
+function gl(n){const l=[],now=new Date();for(let i=n;i>=0;i--){const t=new Date(now-i*600000);l.push(t.getHours().toString().padStart(2,'0')+':'+t.getMinutes().toString().padStart(2,'0'))}return l}
+function gd(b,v,n){const d=[];let c=b;for(let i=0;i<=n;i++){c+=(Math.random()-.48)*v;d.push(parseFloat(c.toFixed(1)))}return d}
+const lb=gl(144);
+
+// warm/cool chart colours matching sensor cards
+new Chart(document.getElementById('chart-temp').getContext('2d'),{...CD,data:{labels:lb,datasets:[{label:'Innen (°C)',data:gd(26,.8,144),borderColor:'#f0883e',backgroundColor:'rgba(240,136,62,.06)',borderWidth:1.5,pointRadius:0,fill:true,tension:.3},{label:'Außen (°C)',data:gd(18,1.2,144),borderColor:'#58a6ff',backgroundColor:'rgba(88,166,255,.06)',borderWidth:1.5,pointRadius:0,fill:true,tension:.3}]}});
+new Chart(document.getElementById('chart-hum').getContext('2d'),{...CD,data:{labels:lb,datasets:[{label:'Innen (%)',data:gd(62,2,144),borderColor:'#f0883e',backgroundColor:'rgba(240,136,62,.06)',borderWidth:1.5,pointRadius:0,fill:true,tension:.3},{label:'Außen (%)',data:gd(48,3,144),borderColor:'#58a6ff',backgroundColor:'rgba(88,166,255,.06)',borderWidth:1.5,pointRadius:0,fill:true,tension:.3}]}});
+new Chart(document.getElementById('chart-fan').getContext('2d'),{...CD,data:{labels:lb,datasets:[{label:'Lüfter (%)',data:gd(42,8,144).map(v=>Math.max(0,Math.min(100,Math.round(v)))),borderColor:'#e3b341',backgroundColor:'rgba(227,179,65,.06)',borderWidth:1.5,pointRadius:0,fill:true,tension:.3}]}});
+
+(function(){const t=document.createElement('div');t.className='tooltip hidden';document.body.appendChild(t);let _t=null,_e=null;
+document.addEventListener('mouseover',e=>{const el=e.target.closest('[data-tooltip]');clearTimeout(_t);if(!el){t.classList.add('hidden');return}_e=e;_t=setTimeout(()=>{t.textContent=el.dataset.tooltip;t.classList.remove('hidden');if(_e){t.style.left=Math.min(_e.clientX+14,innerWidth-t.offsetWidth-10)+'px';t.style.top=Math.max(_e.clientY-t.offsetHeight-8,8)+'px'}},600)});
+document.addEventListener('mousemove',e=>{_e=e;if(t.classList.contains('hidden'))return;t.style.left=Math.min(e.clientX+14,innerWidth-t.offsetWidth-10)+'px';t.style.top=Math.max(e.clientY-t.offsetHeight-8,8)+'px'});
+document.addEventListener('mouseout',()=>{clearTimeout(_t);t.classList.add('hidden')})})();
+</script>
+</body>
+</html>

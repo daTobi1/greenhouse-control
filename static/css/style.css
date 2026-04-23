@@ -11,6 +11,7 @@
   --accent2:   #79c0ff;
   --accent3:   #1f6feb;
   --danger:    #f85149;
+  --danger-muted: #7b1a18;
   --warn:      #e3b341;
   --text:      #e6edf3;
   --text2:     #b1bac4;
@@ -18,7 +19,38 @@
   --blue:      #58a6ff;
   --font:      'Segoe UI', system-ui, sans-serif;
   --radius:    10px;
+  --radius-md: 6px;
+  --radius-sm: 4px;
   --shadow:    0 2px 16px rgba(0,0,0,.6);
+
+  /* Spacing scale */
+  --sp-xs:  0.25rem;
+  --sp-sm:  0.5rem;
+  --sp-md:  1rem;
+  --sp-lg:  1.5rem;
+
+  /* Typography scale */
+  --fs-xs:  0.72rem;
+  --fs-sm:  0.8rem;
+  --fs-base: 0.85rem;
+  --fs-lg:  1rem;
+  --fs-xl:  1.1rem;
+
+  /* Transitions */
+  --tr-fast:   0.15s;
+  --tr-normal: 0.2s;
+
+  /* Semantic colours */
+  --trend-up:    var(--danger);
+  --trend-down:  var(--accent);
+  --trend-stable:var(--text3);
+  --overlay-bg:  rgba(0,0,0,.7);
+  --lightbox-bg: rgba(0,0,0,.9);
+  --lightbox-btn:rgba(255,255,255,.12);
+  --lightbox-btn-hover:rgba(255,255,255,.25);
+  --lightbox-text:rgba(255,255,255,.7);
+  --toggle-knob: #fff;
+  --log-bg:      #000;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -109,7 +141,7 @@ h1 { font-size: 1.1rem; font-weight: 600; color: var(--accent2); }
 .btn-secondary { background: var(--bg3); border: 1px solid var(--border); }
 .btn-secondary:hover { background: var(--border); }
 
-.btn-danger { background: #7b1a18; }
+.btn-danger { background: var(--danger-muted); }
 .btn-danger:hover { background: var(--danger); }
 
 .btn-icon {
@@ -118,8 +150,13 @@ h1 { font-size: 1.1rem; font-weight: 600; color: var(--accent2); }
   color: var(--text2);
   font-size: 1.2rem;
   cursor: pointer;
-  padding: .2rem .4rem;
-  border-radius: 4px;
+  padding: .4rem .6rem;
+  border-radius: var(--radius-sm);
+  min-width: 36px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .btn-icon:hover { background: var(--bg3); color: var(--text); }
 
@@ -127,10 +164,11 @@ h1 { font-size: 1.1rem; font-weight: 600; color: var(--accent2); }
   background: var(--bg3);
   border: 1px solid var(--border);
   color: var(--text2);
-  border-radius: 4px;
-  padding: .1rem .4rem;
+  border-radius: var(--radius-sm);
+  padding: .3rem .6rem;
   cursor: pointer;
   font-size: .8rem;
+  min-height: 28px;
 }
 .btn-small:hover { background: var(--border); }
 
@@ -187,9 +225,9 @@ h1 { font-size: 1.1rem; font-weight: 600; color: var(--accent2); }
   letter-spacing: .02em;
   white-space: nowrap;
 }
-.trend-up    { color: #f85149; background: #f8514918; }
-.trend-down  { color: #58a6ff; background: #58a6ff18; }
-.trend-stable{ color: #8b949e; background: #8b949e18; }
+.trend-up    { color: var(--trend-up);     background: color-mix(in srgb, var(--trend-up) 10%, transparent); }
+.trend-down  { color: var(--trend-down);   background: color-mix(in srgb, var(--trend-down) 10%, transparent); }
+.trend-stable{ color: var(--trend-stable); background: color-mix(in srgb, var(--trend-stable) 10%, transparent); }
 
 .card-unit {
   font-size: 1rem;
@@ -349,14 +387,7 @@ main {
 
 .unit { font-size: .8rem; color: var(--text3); }
 
-select {
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: 5px;
-  padding: .28rem .5rem;
-  font-size: .85rem;
-}
+/* select styling handled by .control-row select above */
 
 /* ============================================================
    Charts
@@ -465,7 +496,7 @@ select {
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.7);
+  background: var(--overlay-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -547,7 +578,7 @@ select {
   padding: .15rem .45rem;
   border-radius: 10px;
   background: var(--warn);
-  color: #000;
+  color: var(--bg);
   animation: pulse 2s infinite;
 }
 
@@ -585,8 +616,8 @@ select {
 .upd-log-wrap { margin-top: .5rem; }
 
 .upd-log {
-  background: #000;
-  color: #b1bac4;
+  background: var(--log-bg);
+  color: var(--text2);
   font-size: .75rem;
   padding: .6rem .8rem;
   border-radius: 6px;
@@ -716,9 +747,10 @@ select {
   cursor: pointer;
   background: var(--bg3);
   border: 1px solid var(--border);
-  transition: border-color .15s, transform .15s;
+  transition: border-color var(--tr-fast), transform var(--tr-fast);
+  will-change: transform;
 }
-.gallery-thumb:hover { border-color: var(--accent); transform: scale(1.03); }
+.gallery-thumb:hover { border-color: var(--accent); transform: scale(1.02); }
 
 .gallery-thumb img,
 .gallery-thumb video {
@@ -734,7 +766,7 @@ select {
   left: 0;
   right: 0;
   background: rgba(0,0,0,.55);
-  color: #ccc;
+  color: var(--text2);
   font-size: .6rem;
   padding: .15rem .3rem;
   white-space: nowrap;
@@ -762,7 +794,7 @@ select {
 /* Lightbox */
 #lightbox-overlay {
   z-index: 900;
-  background: rgba(0,0,0,.9);
+  background: var(--lightbox-bg);
 }
 
 .lightbox-inner {
@@ -787,9 +819,9 @@ select {
   position: fixed;
   top: 50%;
   transform: translateY(-50%);
-  background: rgba(255,255,255,.12);
+  background: var(--lightbox-btn);
   border: none;
-  color: #fff;
+  color: var(--text);
   font-size: 1.6rem;
   padding: .6rem .9rem;
   cursor: pointer;
@@ -797,7 +829,7 @@ select {
   transition: background .15s;
   z-index: 901;
 }
-.lightbox-btn:hover { background: rgba(255,255,255,.25); }
+.lightbox-btn:hover { background: var(--lightbox-btn-hover); }
 #lightbox-prev { left: .8rem; }
 #lightbox-next { right: .8rem; }
 
@@ -805,9 +837,9 @@ select {
   position: fixed;
   top: .8rem;
   right: .8rem;
-  background: rgba(255,255,255,.12);
+  background: var(--lightbox-btn);
   border: none;
-  color: #fff;
+  color: var(--text);
   font-size: 1.2rem;
   padding: .35rem .7rem;
   cursor: pointer;
@@ -815,14 +847,14 @@ select {
   z-index: 901;
   transition: background .15s;
 }
-.lightbox-close:hover { background: rgba(255,255,255,.25); }
+.lightbox-close:hover { background: var(--lightbox-btn-hover); }
 
 .lightbox-counter {
   position: fixed;
   bottom: .8rem;
   left: 50%;
   transform: translateX(-50%);
-  color: rgba(255,255,255,.7);
+  color: var(--lightbox-text);
   font-size: .8rem;
   z-index: 901;
 }
@@ -908,7 +940,7 @@ select {
 }
 .status-label.clickable:hover { color: var(--text); }
 
-.btn-small-danger { background: #7b1a18; border-color: #7b1a18; color: var(--text); }
+.btn-small-danger { background: var(--danger-muted); border-color: var(--danger-muted); color: var(--text); }
 .btn-small-danger:hover { background: var(--danger); border-color: var(--danger); }
 
 /* ============================================================
@@ -930,6 +962,25 @@ select {
   transition: opacity .3s;
 }
 .toast.hidden { display: none; }
+
+/* ============================================================
+   Focus states (accessibility)
+============================================================ */
+.btn:focus-visible,
+.btn-secondary:focus-visible,
+.btn-danger:focus-visible,
+.btn-icon:focus-visible,
+.btn-small:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.toggle-switch input:focus-visible + .toggle-slider {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 /* ============================================================
    Utilities
@@ -954,4 +1005,67 @@ select {
 
 @media (max-width: 420px) {
   .sensor-grid { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
+   Toggle Switch (regulation on/off)
+============================================================ */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  vertical-align: middle;
+  margin-left: .5rem;
+  cursor: pointer;
+}
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  transition: background .2s, border-color .2s;
+}
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  left: 2px;
+  bottom: 2px;
+  background: var(--text3);
+  border-radius: 50%;
+  transition: transform .2s, background .2s;
+}
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--accent3);
+  border-color: var(--accent);
+}
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(20px);
+  background: var(--toggle-knob);
+}
+
+/* Dimmed state when regulation is off */
+.fan-card.regulation-off .gauge-container,
+.fan-card.regulation-off .fan-controls,
+.fan-card.regulation-off .manual-slider {
+  opacity: .35;
+  pointer-events: none;
+}
+.fan-card .regulation-badge {
+  display: none;
+  text-align: center;
+  color: var(--text3);
+  font-size: .8rem;
+  margin-top: .4rem;
+}
+.fan-card.regulation-off .regulation-badge {
+  display: block;
 }

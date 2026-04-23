@@ -250,8 +250,23 @@ async function fetchFan() {
       const delta = trendH[trendH.length - 1] - trendH[0];
       if (Math.abs(delta) >= 5) trendLabel = delta > 0 ? ' ▲' : ' ▼';
     }
-    document.getElementById('gauge-sub').textContent =
-      (d.manual_override ? 'Manuell' : 'Auto') + trendLabel;
+    // Regulation enabled/disabled
+    const regEnabled = d.regulation_enabled !== false;
+    const fanCard = document.querySelector('.fan-card');
+    const regToggle = document.getElementById('regulation-toggle');
+    if (regToggle && regToggle !== document.activeElement) {
+      regToggle.checked = regEnabled;
+    }
+    if (fanCard) {
+      fanCard.classList.toggle('regulation-off', !regEnabled);
+    }
+
+    if (!regEnabled) {
+      document.getElementById('gauge-sub').textContent = 'Aus';
+    } else {
+      document.getElementById('gauge-sub').textContent =
+        (d.manual_override ? 'Manuell' : 'Auto') + trendLabel;
+    }
 
     const autoBtn   = document.getElementById('btn-auto');
     const manualBtn = document.getElementById('btn-manual');
@@ -292,6 +307,19 @@ async function setManualSpeed(speed) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ speed: parseFloat(speed) })
   });
+  fetchFan();
+}
+
+// ----------------------------------------------------------------
+// Regulation toggle (central on/off)
+// ----------------------------------------------------------------
+async function toggleRegulation(enabled) {
+  await fetch(`${API}/api/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ regulation_enabled: enabled })
+  });
+  showToast(enabled ? 'Regelung eingeschaltet' : 'Regelung ausgeschaltet');
   fetchFan();
 }
 
@@ -415,16 +443,23 @@ function tsToLabel(ts) {
          d.getMinutes().toString().padStart(2,'0');
 }
 
+let _historyAbort = null;
+
 async function loadHistory() {
   const tempHours = parseInt(document.getElementById('chart-hours-temp').value);
   const humHours  = parseInt(document.getElementById('chart-hours-hum').value);
   const fanHours  = parseInt(document.getElementById('chart-hours-fan').value);
 
+  // Cancel previous in-flight history request
+  if (_historyAbort) _historyAbort.abort();
+  _historyAbort = new AbortController();
+  const signal = _historyAbort.signal;
+
   try {
     const [tempSensor, humSensor, fanData] = await Promise.all([
-      fetch(`${API}/api/sensors/history?hours=${tempHours}`).then(r => r.json()),
-      fetch(`${API}/api/sensors/history?hours=${humHours}`).then(r => r.json()),
-      fetch(`${API}/api/fans/history?hours=${fanHours}`).then(r => r.json()),
+      fetch(`${API}/api/sensors/history?hours=${tempHours}`, { signal }).then(r => r.json()),
+      fetch(`${API}/api/sensors/history?hours=${humHours}`, { signal }).then(r => r.json()),
+      fetch(`${API}/api/fans/history?hours=${fanHours}`, { signal }).then(r => r.json()),
     ]);
 
     // Temperature chart
@@ -460,50 +495,157 @@ async function loadHistory() {
     charts.fan.update();
 
   } catch(e) {
+    if (e.name === 'AbortError') return;
     console.error('History load error:', e);
   }
 }
 
 // ----------------------------------------------------------------
-// Timelapse
+// Timelapse – Multi-Camera
 // ----------------------------------------------------------------
-async function loadCameras() {
-  const select = document.getElementById('tl-cam-idx');
-  const prev   = select.value;
-  select.innerHTML = '<option value="">Suche…</option>';
-  select.disabled  = true;
+let _cameraCount = 1;
+let _availableCameras = [];  // shared list from hardware scan
 
+function buildCameraSection(ci) {
+  const label = _cameraCount > 1 ? ` ${ci}` : '';
+  return `
+  <section class="timelapse-grid" id="tl-section-${ci}">
+    <div class="card timelapse-card">
+      <div class="card-label">Timelapse${label}</div>
+
+      <div class="tl-status">
+        <span id="tl-status-dot-${ci}" class="status-dot"></span>
+        <span id="tl-status-text-${ci}">Inaktiv</span>
+        <span id="tl-frame-count-${ci}" class="tl-frames"></span>
+      </div>
+
+      <div class="control-row" data-tooltip="Standbild: ein JPEG pro Intervall. Kurzer Clip: ein kurzes MP4-Video pro Intervall.">
+        <label>Aufnahmemodus</label>
+        <select id="tl-capture-mode-${ci}" onchange="updateCaptureModeUI(${ci})">
+          <option value="still">Standbild (JPEG)</option>
+          <option value="clip">Kurzer Clip (MP4)</option>
+        </select>
+      </div>
+      <div id="clip-options-${ci}" class="hidden">
+        <div class="control-row" data-tooltip="Länge des aufgezeichneten Clips in Sekunden.">
+          <label>Clip-Dauer</label>
+          <div class="input-group">
+            <input type="number" id="tl-clip-duration-${ci}" min="1" max="60" step="1" value="5" />
+            <span class="unit">s</span>
+          </div>
+        </div>
+      </div>
+      <div class="control-row" data-tooltip="Zeitabstand zwischen zwei Timelapse-Aufnahmen in Stunden.">
+        <label>Intervall (Stunden)</label>
+        <input type="text" inputmode="decimal" id="tl-interval-${ci}" placeholder="0,0014" />
+      </div>
+      <div class="control-row" data-tooltip="Hardware-Kamera auswählen.">
+        <label>Kamera</label>
+        <div class="cam-select-wrap">
+          <select id="tl-cam-idx-${ci}" onchange="loadResolutions(${ci}, this.value)">
+            <option value="${ci}">Kamera ${ci}</option>
+          </select>
+          <button class="btn-small" onclick="loadCamerasForSlot(${ci})" title="Kameras suchen">&#8635;</button>
+        </div>
+      </div>
+      <div class="control-row" data-tooltip="Aufnahmeauflösung.">
+        <label>Auflösung</label>
+        <select id="tl-resolution-${ci}" onchange="loadFps(${ci}, document.getElementById('tl-cam-idx-${ci}').value, this.value)">
+          <option value="0x0">Kamera Standard</option>
+        </select>
+      </div>
+      <div class="control-row" data-tooltip="Bildrate der Kameraaufnahme.">
+        <label>Aufnahme-FPS</label>
+        <select id="tl-clip-fps-${ci}">
+          <option value="10">10 fps</option>
+        </select>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn"            id="btn-tl-start-${ci}" onclick="startTimelapse(${ci})">Starten</button>
+        <button class="btn btn-danger" id="btn-tl-stop-${ci}"  onclick="stopTimelapse(${ci})" disabled>Stoppen</button>
+      </div>
+
+      <div class="card-label" style="margin-top:1rem">Aufnahmen</div>
+      <div id="session-list-${ci}" class="session-list"></div>
+    </div>
+
+    <div class="card camera-card">
+      <div class="card-label">Kamera-Vorschau${label}
+        <button class="btn-small" onclick="refreshPreview(${ci})">&#8635;</button>
+      </div>
+      <div class="preview-wrap">
+        <img id="camera-preview-${ci}" src="" alt="Kein Bild" class="camera-img" />
+        <div id="preview-placeholder-${ci}" class="preview-placeholder">Kamera nicht verfügbar</div>
+      </div>
+    </div>
+  </section>`;
+}
+
+async function initCameraSections() {
+  try {
+    const r = await fetch(`${API}/api/settings`);
+    const s = await r.json();
+    _cameraCount = Math.max(1, Math.min(4, parseInt(s.camera_count) || 1));
+  } catch(e) { _cameraCount = 1; }
+
+  const container = document.getElementById('timelapse-container');
+  container.innerHTML = '';
+  for (let i = 0; i < _cameraCount; i++) {
+    container.innerHTML += buildCameraSection(i);
+  }
+  // Scan cameras once, then populate all dropdowns
+  await loadAllCameras();
+  for (let i = 0; i < _cameraCount; i++) {
+    loadResolutions(i, document.getElementById(`tl-cam-idx-${i}`).value);
+  }
+}
+
+async function loadAllCameras() {
   try {
     const r = await fetch(`${API}/api/timelapse/cameras`);
     const d = await r.json();
-    const cameras = d.cameras || [];
-
-    if (!cameras.length) {
-      select.innerHTML = '<option value="0">Keine Kamera gefunden</option>';
-    } else {
-      select.innerHTML = cameras
-        .map(c => `<option value="${c.index}">${c.name} (Index ${c.index})</option>`)
-        .join('');
-      if (cameras.some(c => String(c.index) === prev)) select.value = prev;
-    }
-  } catch(e) {
-    select.innerHTML = '<option value="0">Kamera 0</option>';
+    _availableCameras = d.cameras || [];
+  } catch(e) { _availableCameras = []; }
+  for (let i = 0; i < _cameraCount; i++) {
+    populateCameraDropdown(i);
   }
+}
+
+function populateCameraDropdown(ci) {
+  const select = document.getElementById(`tl-cam-idx-${ci}`);
+  if (!select) return;
+  const prev = select.value;
+  if (!_availableCameras.length) {
+    select.innerHTML = `<option value="${ci}">Kamera ${ci}</option>`;
+  } else {
+    select.innerHTML = _availableCameras
+      .map(c => `<option value="${c.index}">${escHtml(c.name)} (Index ${c.index})</option>`)
+      .join('');
+    if (_availableCameras.some(c => String(c.index) === prev)) select.value = prev;
+  }
+}
+
+async function loadCamerasForSlot(ci) {
+  const select = document.getElementById(`tl-cam-idx-${ci}`);
+  select.innerHTML = '<option value="">Suche…</option>';
+  select.disabled = true;
+  await loadAllCameras();
   select.disabled = false;
-  await loadResolutions(select.value);
+  await loadResolutions(ci, select.value);
 }
 
-function updateCaptureModeUI() {
-  const mode = document.getElementById('tl-capture-mode').value;
-  document.getElementById('clip-options').classList.toggle('hidden', mode !== 'clip');
+function updateCaptureModeUI(ci) {
+  const mode = document.getElementById(`tl-capture-mode-${ci}`).value;
+  document.getElementById(`clip-options-${ci}`).classList.toggle('hidden', mode !== 'clip');
 }
 
-async function loadResolutions(camIdx) {
-  const sel = document.getElementById('tl-resolution');
+async function loadResolutions(ci, devIdx) {
+  const sel = document.getElementById(`tl-resolution-${ci}`);
   sel.innerHTML = '<option value="0x0">Kamera Standard</option>';
   sel.disabled = true;
   try {
-    const r = await fetch(`${API}/api/timelapse/resolutions?camera=${camIdx}`);
+    const r = await fetch(`${API}/api/timelapse/resolutions?camera=${devIdx}`);
     const d = await r.json();
     (d.resolutions || []).forEach(res => {
       const opt = document.createElement('option');
@@ -514,22 +656,24 @@ async function loadResolutions(camIdx) {
     // Restore saved resolution
     const sr = await fetch(`${API}/api/settings`);
     const s  = await sr.json();
-    const saved = `${s.camera_capture_width ?? 0}x${s.camera_capture_height ?? 0}`;
+    const wKey = ci === 0 ? (s.cam_0_capture_width ?? s.camera_capture_width ?? 0) : (s[`cam_${ci}_capture_width`] ?? 0);
+    const hKey = ci === 0 ? (s.cam_0_capture_height ?? s.camera_capture_height ?? 0) : (s[`cam_${ci}_capture_height`] ?? 0);
+    const saved = `${wKey}x${hKey}`;
     if ([...sel.options].some(o => o.value === saved)) sel.value = saved;
   } catch(e) {}
   sel.disabled = false;
-  await loadFps(camIdx, sel.value);
+  await loadFps(ci, devIdx, sel.value);
 }
 
-async function loadFps(camIdx, resolution) {
-  const sel   = document.getElementById('tl-clip-fps');
+async function loadFps(ci, devIdx, resolution) {
+  const sel   = document.getElementById(`tl-clip-fps-${ci}`);
   const saved = sel.value;
   sel.innerHTML = '';
   sel.disabled  = true;
   const [w, h] = (resolution || '0x0').split('x').map(Number);
   const fallback = [5, 10, 15, 20, 25, 30];
   try {
-    const r = await fetch(`${API}/api/timelapse/fps?camera=${camIdx}&width=${w}&height=${h}`);
+    const r = await fetch(`${API}/api/timelapse/fps?camera=${devIdx}&width=${w}&height=${h}`);
     const d = await r.json();
     const list = d.fps && d.fps.length ? d.fps : fallback;
     list.forEach(fps => {
@@ -550,151 +694,174 @@ async function loadFps(camIdx, resolution) {
   sel.disabled = false;
 }
 
-async function fetchTimelapse() {
+async function fetchTimelapse(ci) {
   try {
-    const r = await fetch(`${API}/api/timelapse/status`);
+    const r = await fetch(`${API}/api/timelapse/status?cam=${ci}`);
     const d = await r.json();
 
-    const dot  = document.getElementById('tl-status-dot');
-    const text = document.getElementById('tl-status-text');
-    const frames = document.getElementById('tl-frame-count');
+    const dot    = document.getElementById(`tl-status-dot-${ci}`);
+    const text   = document.getElementById(`tl-status-text-${ci}`);
+    const frames = document.getElementById(`tl-frame-count-${ci}`);
 
     if (d.active) {
       dot.className  = 'status-dot ok';
       text.textContent = `Aufnahme: ${d.session || ''}`;
       frames.textContent = `${d.frame_count} Bilder`;
-      document.getElementById('btn-tl-start').disabled = true;
-      document.getElementById('btn-tl-stop').disabled  = false;
+      document.getElementById(`btn-tl-start-${ci}`).disabled = true;
+      document.getElementById(`btn-tl-stop-${ci}`).disabled  = false;
     } else {
       dot.className  = 'status-dot';
       text.textContent = 'Inaktiv';
       frames.textContent = '';
-      document.getElementById('btn-tl-start').disabled = false;
-      document.getElementById('btn-tl-stop').disabled  = true;
+      document.getElementById(`btn-tl-start-${ci}`).disabled = false;
+      document.getElementById(`btn-tl-stop-${ci}`).disabled  = true;
     }
 
-    // Update timelapse form from settings (interval stored in seconds, displayed in hours).
-    // Only overwrite if field is empty (initial load) or already matches the server value,
-    // so a user-typed value that hasn't been saved yet is never clobbered by the poll.
-    const tlIntervalEl = document.getElementById('tl-interval');
+    const tlIntervalEl = document.getElementById(`tl-interval-${ci}`);
     const serverSecs   = d.interval ?? 3600;
     const uiSecs       = Math.round(parseDE(tlIntervalEl.value) * 3600);
     if (isNaN(uiSecs) || uiSecs === serverSecs) {
       tlIntervalEl.value = formatDE(serverSecs / 3600, 4);
     }
-    document.getElementById('tl-capture-mode').value = d.capture_mode ?? 'still';
-    document.getElementById('tl-clip-duration').value = d.clip_duration ?? 5;
-    document.getElementById('tl-clip-fps').value = d.clip_fps ?? 10;
-    updateCaptureModeUI();
-    // Sync dropdown selection without triggering a re-scan
-    const camSel = document.getElementById('tl-cam-idx');
-    camSel.value = String(d.camera_index ?? 0);
+    document.getElementById(`tl-capture-mode-${ci}`).value = d.capture_mode ?? 'still';
+    document.getElementById(`tl-clip-duration-${ci}`).value = d.clip_duration ?? 5;
+    document.getElementById(`tl-clip-fps-${ci}`).value = d.clip_fps ?? 10;
+    updateCaptureModeUI(ci);
+    const camSel = document.getElementById(`tl-cam-idx-${ci}`);
+    camSel.value = String(d.camera_index ?? ci);
 
-    // Camera dot
-    setDot('dot-cam', d.camera_available ? 'ok' : 'warn');
+    // Camera dot (use first camera status)
+    if (ci === 0) setDot('dot-cam', d.camera_available ? 'ok' : 'warn');
   } catch(e) {}
 }
 
-async function loadSessions() {
+async function fetchAllTimelapse() {
+  const tasks = [];
+  for (let i = 0; i < _cameraCount; i++) tasks.push(fetchTimelapse(i));
+  await Promise.allSettled(tasks);
+}
+
+async function loadSessions(ci) {
   try {
-    const r = await fetch(`${API}/api/timelapse/sessions`);
+    const r = await fetch(`${API}/api/timelapse/sessions?cam=${ci}`);
     const d = await r.json();
-    renderSessions(d.sessions || []);
+    renderSessions(ci, d.sessions || []);
   } catch(e) {}
 }
 
-function renderSessions(sessions) {
-  const list = document.getElementById('session-list');
+async function loadAllSessions() {
+  const tasks = [];
+  for (let i = 0; i < _cameraCount; i++) tasks.push(loadSessions(i));
+  await Promise.allSettled(tasks);
+}
+
+function renderSessions(ci, sessions) {
+  const list = document.getElementById(`session-list-${ci}`);
+  if (!list) return;
   if (!sessions.length) {
     list.innerHTML = '<div style="color:var(--text3);font-size:.75rem">Keine Aufnahmen</div>';
     return;
   }
-  list.innerHTML = sessions.map(s => `
+  list.innerHTML = sessions.map(s => {
+    const safeName = escHtml(s.name);
+    return `
     <div class="session-item">
-      <span class="session-name">${s.name}${s.active ? ' ●' : ''}</span>
-      <span class="session-info" onclick="openGallery('${s.name}')">${s.frame_count} ${s.capture_mode === 'clip' ? 'Clips' : 'Bilder'}</span>
+      <span class="session-name">${safeName}${s.active ? ' ●' : ''}</span>
+      <span class="session-info" onclick="openGallery('${s.name.replace(/'/g, "\\'")}', ${ci})">${s.frame_count} ${s.capture_mode === 'clip' ? 'Clips' : 'Bilder'}</span>
       <div class="session-actions">
         ${!s.active
           ? `<button class="btn-small" style="color:var(--danger)"
-               onclick="deleteSession('${s.name}')">&#10005;</button>`
+               onclick="deleteSession('${s.name.replace(/'/g, "\\'")}', ${ci})">&#10005;</button>`
           : ''}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
-async function startTimelapse() {
-  const intervalHours = parseDE(document.getElementById('tl-interval').value);
+async function startTimelapse(ci) {
+  const intervalHours = parseDE(document.getElementById(`tl-interval-${ci}`).value);
   const intervalSecs  = Math.round(intervalHours * 3600);
-  const camIdx        = parseInt(document.getElementById('tl-cam-idx').value);
-  const [capW, capH]  = document.getElementById('tl-resolution').value.split('x').map(Number);
-  const captureMode   = document.getElementById('tl-capture-mode').value;
-  const clipDuration  = parseInt(document.getElementById('tl-clip-duration').value);
-  const clipFps       = parseInt(document.getElementById('tl-clip-fps').value);
+  const devIdx        = parseInt(document.getElementById(`tl-cam-idx-${ci}`).value);
+  const [capW, capH]  = document.getElementById(`tl-resolution-${ci}`).value.split('x').map(Number);
+  const captureMode   = document.getElementById(`tl-capture-mode-${ci}`).value;
+  const clipDuration  = parseInt(document.getElementById(`tl-clip-duration-${ci}`).value);
+  const clipFps       = parseInt(document.getElementById(`tl-clip-fps-${ci}`).value);
 
   await fetch(`${API}/api/settings`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      timelapse_interval: intervalSecs,
-      camera_index: camIdx,
-      camera_capture_width: capW,
-      camera_capture_height: capH,
-      capture_mode: captureMode,
-      clip_duration: clipDuration,
-      clip_fps: clipFps,
+      [`cam_${ci}_timelapse_interval`]: intervalSecs,
+      [`cam_${ci}_device_index`]: devIdx,
+      [`cam_${ci}_capture_width`]: capW,
+      [`cam_${ci}_capture_height`]: capH,
+      [`cam_${ci}_capture_mode`]: captureMode,
+      [`cam_${ci}_clip_duration`]: clipDuration,
+      [`cam_${ci}_clip_fps`]: clipFps,
     })
   });
 
-  const r = await fetch(`${API}/api/timelapse/start`, {
+  const r = await fetch(`${API}/api/timelapse/start?cam=${ci}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({})
   });
   if (r.ok) {
-    showToast('Timelapse gestartet');
-    fetchTimelapse();
-    loadSessions();
+    showToast(`Timelapse${_cameraCount > 1 ? ' ' + ci : ''} gestartet`);
+    fetchTimelapse(ci);
+    loadSessions(ci);
   } else {
     const e = await r.json();
     showToast('Fehler: ' + (e.detail || r.status));
   }
 }
 
-async function stopTimelapse() {
-  await fetch(`${API}/api/timelapse/stop`, { method: 'POST' });
-  showToast('Timelapse gestoppt');
-  fetchTimelapse();
-  loadSessions();
+async function stopTimelapse(ci) {
+  await fetch(`${API}/api/timelapse/stop?cam=${ci}`, { method: 'POST' });
+  showToast(`Timelapse${_cameraCount > 1 ? ' ' + ci : ''} gestoppt`);
+  fetchTimelapse(ci);
+  loadSessions(ci);
 }
 
-
-async function deleteSession(session) {
+async function deleteSession(session, ci) {
   if (!confirm(`Aufnahme "${session}" löschen?`)) return;
-  const r = await fetch(`${API}/api/timelapse/sessions/${session}`, { method: 'DELETE' });
+  const r = await fetch(`${API}/api/timelapse/sessions/${session}?cam=${ci}`, { method: 'DELETE' });
   if (r.ok) {
     showToast('Gelöscht');
-    loadSessions();
+    loadSessions(ci);
   }
 }
 
 // ----------------------------------------------------------------
-// Camera preview
+// Camera preview (per camera)
 // ----------------------------------------------------------------
-async function refreshPreview() {
-  const img = document.getElementById('camera-preview');
-  const ph  = document.getElementById('preview-placeholder');
+let _previewAbort = null;
+
+async function refreshPreview(ci) {
+  if (ci === undefined) { for (let i = 0; i < _cameraCount; i++) refreshPreview(i); return; }
+  const img = document.getElementById(`camera-preview-${ci}`);
+  const ph  = document.getElementById(`preview-placeholder-${ci}`);
+  if (!img || !ph) return;
+
+  // Cancel previous in-flight preview request
+  if (_previewAbort) _previewAbort.abort();
+  _previewAbort = new AbortController();
+
   try {
-    const r = await fetch(`${API}/api/timelapse/preview?t=${Date.now()}`);
+    const r = await fetch(`${API}/api/timelapse/preview?cam=${ci}&t=${Date.now()}`, { signal: _previewAbort.signal });
     if (!r.ok) throw new Error();
     const blob = await r.blob();
+    // Revoke previous Blob URL to prevent memory leak
+    if (img.src && img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
     img.src = URL.createObjectURL(blob);
     img.classList.add('loaded');
     ph.style.display = 'none';
-    setDot('dot-cam', 'ok');
+    if (ci === 0) setDot('dot-cam', 'ok');
   } catch(e) {
+    if (e.name === 'AbortError') return;
     img.classList.remove('loaded');
     ph.style.display = '';
-    setDot('dot-cam', 'error');
+    if (ci === 0) setDot('dot-cam', 'error');
   }
 }
 
@@ -813,18 +980,23 @@ async function loadVersionHistory() {
       list.innerHTML = `<span style="color:var(--text3);font-size:.8rem">${d.error || 'Keine Commits gefunden'}</span>`;
       return;
     }
-    list.innerHTML = d.commits.map(c => `
+    list.innerHTML = d.commits.map(c => {
+      const safeSubject = escHtml(c.subject);
+      const safeShort = escHtml(c.short);
+      const safeHash = escHtml(c.hash);
+      return `
       <div class="upd-commit${c.current ? ' current' : ''}">
         <div class="upd-commit-meta">
-          <code>${c.short}</code>
-          <span class="upd-date">${c.date}</span>
+          <code>${safeShort}</code>
+          <span class="upd-date">${escHtml(c.date)}</span>
         </div>
-        <span class="upd-commit-subject" title="${c.subject.replace(/"/g,'&quot;')}">${c.subject}</span>
+        <span class="upd-commit-subject" title="${safeSubject}">${safeSubject}</span>
         ${c.current
           ? '<span style="color:var(--text3);font-size:.75rem;flex-shrink:0">aktiv</span>'
-          : `<button class="btn-small" onclick="applyRollback('${c.hash}', \`${c.subject.replace(/`/g,"'")}\`)">Wiederherstellen</button>`
+          : `<button class="btn-small" onclick="applyRollback('${safeHash}', '${safeSubject.replace(/'/g, "\\'")}')">Wiederherstellen</button>`
         }
-      </div>`).join('');
+      </div>`;
+    }).join('');
   } catch(e) {
     list.innerHTML = '<span style="color:var(--danger);font-size:.8rem">Fehler beim Laden</span>';
   }
@@ -1342,6 +1514,7 @@ async function loadSettingsModal() {
     document.getElementById('ble-duration').value       = s.ble_scan_duration         ?? 10;
     document.getElementById('update-interval-days').value = s.update_check_interval_days ?? 7;
     document.getElementById('timelapse-path').value  = s.timelapse_path ?? 'timelapse';
+    document.getElementById('camera-count').value   = s.camera_count ?? 1;
     const shareOn = s.timelapse_share_enabled ?? false;
     document.getElementById('timelapse-share').checked = shareOn;
     updateShareUrl(shareOn);
@@ -1456,6 +1629,7 @@ async function saveSettings() {
     update_check_interval_days: Math.max(0, parseInt(document.getElementById('update-interval-days').value) || 0),
     timelapse_path:         document.getElementById('timelapse-path').value.trim() || 'timelapse',
     timelapse_share_enabled: document.getElementById('timelapse-share').checked,
+    camera_count: Math.max(1, Math.min(4, parseInt(document.getElementById('camera-count').value) || 1)),
   };
   // Tooltip delay is client-side only
   localStorage.setItem('tooltip_delay_ms', document.getElementById('tooltip-delay').value || '600');
@@ -1465,6 +1639,13 @@ async function saveSettings() {
     body: JSON.stringify(body)
   });
   scheduleUpdateCheck(body.update_check_interval_days);
+  // Rebuild camera sections if count changed
+  if (body.camera_count !== _cameraCount) {
+    await initCameraSections();
+    await loadAllSessions();
+    await fetchAllTimelapse();
+    refreshPreview();
+  }
   const msg = document.getElementById('settings-saved');
   msg.classList.remove('hidden');
   setTimeout(() => msg.classList.add('hidden'), 2500);
@@ -1485,13 +1666,16 @@ async function discoverSensors() {
     if (!devices.length) {
       cont.innerHTML = '<div style="color:var(--text3)">Keine SwitchBot-Geräte gefunden</div>';
     } else {
-      cont.innerHTML = devices.map(dev => `
+      cont.innerHTML = devices.map(dev => {
+        const safeMac = escHtml(dev.mac);
+        return `
         <div class="discover-item">
-          <span class="mac-addr">${dev.mac}</span>
+          <span class="mac-addr">${safeMac}</span>
           <span style="color:var(--text3)">${dev.rssi} dBm</span>
-          <button class="btn-small" onclick="setMac('inside','${dev.mac}')">Innen</button>
-          <button class="btn-small" onclick="setMac('outside','${dev.mac}')">Außen</button>
-        </div>`).join('');
+          <button class="btn-small" onclick="setMac('inside','${safeMac}')">Innen</button>
+          <button class="btn-small" onclick="setMac('outside','${safeMac}')">Außen</button>
+        </div>`;
+      }).join('');
     }
   } catch(e) {
     document.getElementById('discover-result').textContent = 'Fehler beim Scannen';
@@ -1513,7 +1697,7 @@ async function pollAll() {
   await Promise.allSettled([
     fetchSensors(),
     fetchFan(),
-    fetchTimelapse(),
+    fetchAllTimelapse(),
   ]);
 }
 
@@ -1521,8 +1705,8 @@ async function init() {
   initGauge();
   initCharts();
   await loadControlSettings();
-  loadCameras();          // Hintergrund – Kamera-Scan kann lange dauern
-  await loadSessions();
+  await initCameraSections();
+  await loadAllSessions();
   await pollAll();
   await loadHistory();
   refreshPreview();
@@ -1534,7 +1718,7 @@ async function init() {
   // Reload history every 2 minutes
   setInterval(loadHistory, 120_000);
   // Reload sessions every 30 seconds
-  setInterval(loadSessions, 30_000);
+  setInterval(loadAllSessions, 30_000);
   // Tailscale status every 60 seconds
   setInterval(fetchTailscaleStatus, 60_000);
   // Schedule automatic update check based on saved interval
@@ -1555,15 +1739,17 @@ async function init() {
 // ----------------------------------------------------------------
 let _galleryFiles = [];
 let _lightboxIdx  = 0;
+let _galleryCam   = 0;
 
-async function openGallery(session) {
+async function openGallery(session, ci) {
+  _galleryCam = ci || 0;
   document.getElementById('gallery-title').textContent = `Aufnahmen – ${session}`;
   const grid = document.getElementById('gallery-grid');
   grid.innerHTML = '<div class="gallery-empty">Lade…</div>';
   document.getElementById('gallery-overlay').classList.remove('hidden');
 
   try {
-    const r = await fetch(`${API}/api/timelapse/sessions/${encodeURIComponent(session)}/files`);
+    const r = await fetch(`${API}/api/timelapse/sessions/${encodeURIComponent(session)}/files?cam=${_galleryCam}`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const d = await r.json();
     _galleryFiles = d.files;
@@ -1581,16 +1767,18 @@ function renderGallery() {
     return;
   }
   grid.innerHTML = _galleryFiles.map((f, i) => {
-    const label = f.name.replace(/\.\w+$/, '').replace(/_/g, ' ');
+    const label = escHtml(f.name.replace(/\.\w+$/, '').replace(/_/g, ' '));
+    const safeUrl = escHtml(f.url);
+    const safeName = escHtml(f.name);
     if (f.type === 'video') {
       return `<div class="gallery-thumb" onclick="openLightbox(${i})">
-        <video src="${f.url}" muted preload="metadata" style="pointer-events:none"></video>
+        <video src="${safeUrl}" muted preload="metadata" style="pointer-events:none"></video>
         <span class="thumb-video-icon">▶</span>
         <span class="thumb-label">${label}</span>
       </div>`;
     }
     return `<div class="gallery-thumb" onclick="openLightbox(${i})">
-      <img src="${f.url}" loading="lazy" alt="${f.name}">
+      <img src="${safeUrl}" loading="lazy" alt="${safeName}">
       <span class="thumb-label">${label}</span>
     </div>`;
   }).join('');
@@ -1650,6 +1838,18 @@ document.addEventListener('keydown', e => {
     if (e.key === 'Escape')     closeLightbox();
   } else if (!document.getElementById('gallery-overlay').classList.contains('hidden')) {
     if (e.key === 'Escape') closeGallery({ target: document.getElementById('gallery-overlay') });
+  }
+});
+
+// Pause polling when tab is hidden, resume when visible
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  } else {
+    if (!pollTimer) {
+      pollAll();
+      pollTimer = setInterval(pollAll, 10_000);
+    }
   }
 });
 
