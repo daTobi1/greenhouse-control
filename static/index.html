@@ -10,6 +10,9 @@
   <link rel="manifest" href="/manifest.json" />
   <link rel="apple-touch-icon" href="/icon-192.svg" />
   <title>Gewächshaus Steuerung</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css" />
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 </head>
@@ -47,7 +50,7 @@
 
   <!-- Sensor Cards -->
   <section class="sensor-grid">
-    <div class="card sensor-card" id="card-in-temp">
+    <div class="card sensor-card sensor-card--warm" id="card-in-temp">
       <div class="card-label">Innen &mdash; Temperatur</div>
       <div class="value-row">
         <div class="card-value" id="in-temp">--</div>
@@ -59,7 +62,7 @@
         <span id="in-temp-ts">--</span>
       </div>
     </div>
-    <div class="card sensor-card" id="card-in-hum">
+    <div class="card sensor-card sensor-card--warm" id="card-in-hum">
       <div class="card-label">Innen &mdash; Feuchtigkeit</div>
       <div class="value-row">
         <div class="card-value" id="in-hum">--</div>
@@ -71,7 +74,7 @@
         <span id="in-hum-ts">--</span>
       </div>
     </div>
-    <div class="card sensor-card" id="card-out-temp">
+    <div class="card sensor-card sensor-card--cool" id="card-out-temp">
       <div class="card-label">Außen &mdash; Temperatur</div>
       <div class="value-row">
         <div class="card-value" id="out-temp">--</div>
@@ -83,7 +86,7 @@
         <span id="out-temp-ts">--</span>
       </div>
     </div>
-    <div class="card sensor-card" id="card-out-hum">
+    <div class="card sensor-card sensor-card--cool" id="card-out-hum">
       <div class="card-label">Außen &mdash; Feuchtigkeit</div>
       <div class="value-row">
         <div class="card-value" id="out-hum">--</div>

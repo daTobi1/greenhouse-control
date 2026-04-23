@@ -374,8 +374,13 @@ const CHART_DEFAULTS = {
     maintainAspectRatio: false,
     animation: false,
     plugins: {
-      legend: { labels: { color: '#8b949e', boxWidth: 12 } },
+      legend: { labels: { color: '#8b949e', boxWidth: 10, font: { family: 'DM Sans', size: 11 } } },
       tooltip: {
+        backgroundColor: '#161b22',
+        borderColor: '#30363d',
+        borderWidth: 1,
+        titleFont: { family: 'DM Sans' },
+        bodyFont: { family: 'JetBrains Mono', size: 11 },
         callbacks: {
           label: ctx => {
             const v = ctx.parsed.y;
@@ -386,12 +391,13 @@ const CHART_DEFAULTS = {
     },
     scales: {
       x: {
-        ticks: { color: '#8b949e', maxTicksLimit: 8, maxRotation: 0 },
+        ticks: { color: '#8b949e', maxTicksLimit: 8, maxRotation: 0, font: { family: 'JetBrains Mono', size: 10 } },
         grid:  { color: '#21262d' },
       },
       y: {
         ticks: {
           color: '#8b949e',
+          font: { family: 'JetBrains Mono', size: 10 },
           callback: val => String(val % 1 === 0 ? val : val.toFixed(1)).replace('.', ','),
         },
         grid:  { color: '#21262d' },
@@ -419,8 +425,8 @@ function makeChart(canvasId, label1, label2, colour1, colour2) {
 }
 
 function initCharts() {
-  charts.temp = makeChart('chart-temp', 'Innen (°C)', 'Außen (°C)', '#ef5350', '#58a6ff');
-  charts.hum  = makeChart('chart-hum',  'Innen (%)',  'Außen (%)',  '#3fb950', '#58a6ff');
+  charts.temp = makeChart('chart-temp', 'Innen (°C)', 'Außen (°C)', '#f0883e', '#58a6ff');
+  charts.hum  = makeChart('chart-hum',  'Innen (%)',  'Außen (%)',  '#f0883e', '#58a6ff');
 
   const ctx3 = document.getElementById('chart-fan').getContext('2d');
   charts.fan = new Chart(ctx3, {
