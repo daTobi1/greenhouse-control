@@ -584,6 +584,62 @@ function buildCameraSection(ci) {
         <img id="camera-preview-${ci}" src="" alt="Kein Bild" class="camera-img" />
         <div id="preview-placeholder-${ci}" class="preview-placeholder">Kamera nicht verfügbar</div>
       </div>
+
+      <div class="cam-settings-header" onclick="toggleCamSettings(${ci})">
+        <span>&#9881; Kamera-Einstellungen</span>
+        <span class="cam-settings-arrow" id="cam-settings-arrow-${ci}">&#9654;</span>
+      </div>
+      <div id="cam-settings-${ci}" class="cam-settings hidden">
+        <div class="cam-prop-row">
+          <label>Auto-Weissabgleich</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="cam-auto-wb-${ci}"
+                   onchange="setCamProp(${ci},'auto_wb',this.checked?1:0)" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="cam-prop-row" id="cam-wb-row-${ci}">
+          <label>Weissabgleich</label>
+          <input type="range" id="cam-wb-${ci}" min="2000" max="10000" step="100" value="5000"
+                 oninput="document.getElementById('cam-wb-val-${ci}').textContent=this.value+'K'"
+                 onchange="setCamProp(${ci},'white_balance',+this.value)" />
+          <span class="cam-prop-val" id="cam-wb-val-${ci}">5000K</span>
+        </div>
+
+        <div class="cam-prop-row" id="cam-contrast-row-${ci}">
+          <label>Kontrast</label>
+          <input type="range" id="cam-contrast-${ci}" min="0" max="255" step="1" value="128"
+                 oninput="document.getElementById('cam-contrast-val-${ci}').textContent=this.value"
+                 onchange="setCamProp(${ci},'contrast',+this.value)" />
+          <span class="cam-prop-val" id="cam-contrast-val-${ci}">128</span>
+        </div>
+
+        <div class="cam-prop-row">
+          <label>Auto-Fokus</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="cam-autofocus-${ci}"
+                   onchange="setCamProp(${ci},'autofocus',this.checked?1:0)" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="cam-prop-row" id="cam-focus-row-${ci}">
+          <label>Fokus</label>
+          <input type="range" id="cam-focus-${ci}" min="0" max="255" step="1" value="0"
+                 oninput="document.getElementById('cam-focus-val-${ci}').textContent=this.value"
+                 onchange="setCamProp(${ci},'focus',+this.value)" />
+          <span class="cam-prop-val" id="cam-focus-val-${ci}">0</span>
+        </div>
+
+        <div class="cam-prop-row" id="cam-zoom-row-${ci}">
+          <label>Zoom</label>
+          <input type="range" id="cam-zoom-${ci}" min="100" max="800" step="10" value="100"
+                 oninput="document.getElementById('cam-zoom-val-${ci}').textContent=this.value"
+                 onchange="setCamProp(${ci},'zoom',+this.value)" />
+          <span class="cam-prop-val" id="cam-zoom-val-${ci}">100</span>
+        </div>
+
+        <div id="cam-props-hint-${ci}" class="cam-props-hint hidden">Grau = von Kamera nicht unterstuetzt</div>
+      </div>
     </div>
   </section>`;
 }
@@ -836,6 +892,88 @@ async function deleteSession(session, ci) {
     showToast('Gelöscht');
     loadSessions(ci);
   }
+}
+
+// ----------------------------------------------------------------
+// Camera properties (white balance, contrast, focus, zoom)
+// ----------------------------------------------------------------
+function toggleCamSettings(ci) {
+  const panel = document.getElementById(`cam-settings-${ci}`);
+  const arrow = document.getElementById(`cam-settings-arrow-${ci}`);
+  const wasHidden = panel.classList.toggle('hidden');
+  arrow.classList.toggle('open', !wasHidden);
+  if (!wasHidden) loadCameraProperties(ci);
+}
+
+let _camPropsLoaded = {};
+
+async function loadCameraProperties(ci) {
+  if (_camPropsLoaded[ci]) return;
+  try {
+    const r = await fetch(`${API}/api/timelapse/camera/properties?cam=${ci}`);
+    const d = await r.json();
+    const props = d.properties || [];
+    let hasUnsupported = false;
+
+    for (const p of props) {
+      if (p.type === 'bool') {
+        const cb = document.getElementById(`cam-${p.key.replace('auto_wb','auto-wb')}-${ci}`);
+        if (cb) cb.checked = p.value > 0.5;
+        if (!p.supported) hasUnsupported = true;
+      } else if (p.type === 'range') {
+        const elId = p.key === 'white_balance' ? 'wb' : p.key;
+        const slider = document.getElementById(`cam-${elId}-${ci}`);
+        const valEl  = document.getElementById(`cam-${elId}-val-${ci}`);
+        const row    = document.getElementById(`cam-${elId}-row-${ci}`);
+        if (slider) {
+          slider.min   = p.min;
+          slider.max   = p.max;
+          slider.step  = p.step;
+          slider.value = p.value;
+        }
+        if (valEl) valEl.textContent = Math.round(p.value) + (p.unit || '');
+        if (row && !p.supported) {
+          row.classList.add('unsupported');
+          hasUnsupported = true;
+        }
+        // Disable manual slider if auto is on
+        if (p.auto_key && row) {
+          const autoKey = p.auto_key === 'auto_wb' ? 'auto-wb' : p.auto_key;
+          const autoCb = document.getElementById(`cam-${autoKey}-${ci}`);
+          if (autoCb && autoCb.checked) row.classList.add('disabled');
+        }
+      }
+    }
+    if (hasUnsupported) {
+      const hint = document.getElementById(`cam-props-hint-${ci}`);
+      if (hint) hint.classList.remove('hidden');
+    }
+    _camPropsLoaded[ci] = true;
+  } catch(e) { console.error('Failed to load camera properties:', e); }
+}
+
+let _camPropTimer = null;
+async function setCamProp(ci, key, value) {
+  // Update dependent UI
+  if (key === 'auto_wb') {
+    const row = document.getElementById(`cam-wb-row-${ci}`);
+    if (row) row.classList.toggle('disabled', value > 0.5);
+  }
+  if (key === 'autofocus') {
+    const row = document.getElementById(`cam-focus-row-${ci}`);
+    if (row) row.classList.toggle('disabled', value > 0.5);
+  }
+
+  try {
+    await fetch(`${API}/api/timelapse/camera/properties?cam=${ci}`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({[key]: value})
+    });
+    // Debounced preview refresh
+    clearTimeout(_camPropTimer);
+    _camPropTimer = setTimeout(() => refreshPreview(ci), 400);
+  } catch(e) { console.error('Failed to set camera property:', e); }
 }
 
 // ----------------------------------------------------------------

@@ -34,6 +34,23 @@ COMMON_RESOLUTIONS = [
     (3840, 2160, "4K UHD"),
 ]
 
+# OpenCV property IDs (numeric for compatibility across builds)
+_PROP_CONTRAST      = 11
+_PROP_ZOOM          = 27
+_PROP_FOCUS         = 28
+_PROP_AUTOFOCUS     = 39
+_PROP_AUTO_WB       = 44
+_PROP_WB_TEMPERATURE = 45
+
+CAMERA_PROPERTIES = [
+    {"key": "auto_wb",       "prop": _PROP_AUTO_WB,       "label": "Auto-Weissabgleich", "type": "bool"},
+    {"key": "white_balance", "prop": _PROP_WB_TEMPERATURE, "label": "Weissabgleich",      "type": "range", "min": 2000, "max": 10000, "step": 100, "unit": "K", "auto_key": "auto_wb"},
+    {"key": "contrast",      "prop": _PROP_CONTRAST,       "label": "Kontrast",           "type": "range", "min": 0,    "max": 255,   "step": 1},
+    {"key": "autofocus",     "prop": _PROP_AUTOFOCUS,      "label": "Auto-Fokus",         "type": "bool"},
+    {"key": "focus",         "prop": _PROP_FOCUS,          "label": "Fokus",              "type": "range", "min": 0,    "max": 255,   "step": 1,   "auto_key": "autofocus"},
+    {"key": "zoom",          "prop": _PROP_ZOOM,           "label": "Zoom",               "type": "range", "min": 100,  "max": 800,   "step": 10},
+]
+
 
 class CameraService:
     def __init__(self, camera_id: int = 0):
@@ -45,6 +62,7 @@ class CameraService:
         self._capture_height: int = 0
         self._session: str | None = None
         self._frame_count: int = 0
+        self._cam_props: dict[int, float] = {}
 
     @property
     def camera_id(self) -> int:
@@ -65,6 +83,84 @@ class CameraService:
         self._capture_height = capture_height
         self._frames_dir.mkdir(parents=True, exist_ok=True)
         self._output_dir.mkdir(parents=True, exist_ok=True)
+
+    # ------------------------------------------------------------------
+    # Camera properties (white balance, contrast, focus, zoom)
+    # ------------------------------------------------------------------
+
+    def set_properties(self, props: dict[str, float]):
+        """Update camera properties from a {key: value} dict."""
+        prop_map = {p["key"]: p["prop"] for p in CAMERA_PROPERTIES}
+        self._cam_props = {}
+        for key, value in props.items():
+            if key in prop_map:
+                self._cam_props[prop_map[key]] = float(value)
+
+    def _apply_props(self, cap):
+        """Apply stored camera properties to an opened VideoCapture."""
+        if not self._cam_props:
+            return
+        # Auto toggles first
+        for pid in (_PROP_AUTO_WB, _PROP_AUTOFOCUS):
+            if pid in self._cam_props:
+                cap.set(pid, self._cam_props[pid])
+        # Manual values (skip if corresponding auto is on)
+        for pid, val in self._cam_props.items():
+            if pid in (_PROP_AUTO_WB, _PROP_AUTOFOCUS):
+                continue
+            if pid == _PROP_WB_TEMPERATURE and self._cam_props.get(_PROP_AUTO_WB, 0) > 0.5:
+                continue
+            if pid == _PROP_FOCUS and self._cam_props.get(_PROP_AUTOFOCUS, 0) > 0.5:
+                continue
+            cap.set(pid, val)
+
+    def detect_properties(self, camera_index: int) -> list[dict]:
+        """Probe camera for supported properties and their value ranges."""
+        if not CV2_AVAILABLE:
+            return []
+        cap = cv2.VideoCapture(camera_index)
+        if not cap.isOpened():
+            return []
+
+        result = []
+        for pdef in CAMERA_PROPERTIES:
+            pid = pdef["prop"]
+            current = cap.get(pid)
+
+            entry = {
+                "key": pdef["key"],
+                "label": pdef["label"],
+                "type": pdef["type"],
+                "value": current,
+            }
+            if "unit" in pdef:
+                entry["unit"] = pdef["unit"]
+            if "auto_key" in pdef:
+                entry["auto_key"] = pdef["auto_key"]
+
+            if pdef["type"] == "range":
+                cap.set(pid, pdef["min"])
+                actual_min = cap.get(pid)
+                cap.set(pid, pdef["max"])
+                actual_max = cap.get(pid)
+                cap.set(pid, current)
+                supported = abs(actual_max - actual_min) > 0.001
+                entry["min"] = actual_min if supported else pdef["min"]
+                entry["max"] = actual_max if supported else pdef["max"]
+                entry["step"] = pdef["step"]
+                entry["supported"] = supported
+            else:
+                test = 0.0 if current > 0.5 else 1.0
+                cap.set(pid, test)
+                readback = cap.get(pid)
+                supported = abs(readback - test) < 0.5
+                cap.set(pid, current)
+                entry["supported"] = supported
+
+            result.append(entry)
+
+        cap.release()
+        return result
 
     # ------------------------------------------------------------------
     # Session control
@@ -116,6 +212,7 @@ class CameraService:
         if not cap.isOpened():
             logger.error("Cannot open camera")
             return None
+        self._apply_props(cap)
 
         ret, frame = cap.read()
         cap.release()
@@ -146,6 +243,7 @@ class CameraService:
         if not cap.isOpened():
             logger.error("Cannot open camera for clip")
             return None
+        self._apply_props(cap)
 
         w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -186,6 +284,7 @@ class CameraService:
         cap = cv2.VideoCapture(self._camera_index)
         if not cap.isOpened():
             return None
+        self._apply_props(cap)
         ret, frame = cap.read()
         cap.release()
         if not ret:

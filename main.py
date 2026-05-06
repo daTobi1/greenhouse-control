@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 import state
+from services.camera import CAMERA_PROPERTIES
 from services.scheduler import Scheduler
 
 logging.basicConfig(
@@ -48,6 +49,14 @@ async def lifespan(app: FastAPI):
             capture_width=cap_w,
             capture_height=cap_h,
         )
+        # Load saved camera properties (white balance, contrast, focus, zoom)
+        cam_props: dict[str, float] = {}
+        for pdef in CAMERA_PROPERTIES:
+            val = settings.get(f"cam_{i}_prop_{pdef['key']}")
+            if val is not None:
+                cam_props[pdef["key"]] = float(val)
+        if cam_props:
+            cam.set_properties(cam_props)
 
     # Fan: read GPIO pin from DB and initialise
     gpio_pin = int(settings.get("fan_gpio_pin") or 18)

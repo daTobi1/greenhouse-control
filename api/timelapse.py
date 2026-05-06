@@ -1,11 +1,14 @@
 import asyncio
 from pathlib import Path
 
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel
 
 import state
+from services.camera import CAMERA_PROPERTIES
 
 router = APIRouter()
 
@@ -260,6 +263,48 @@ async def get_output_file(filename: str, cam: int = Query(0, ge=0)):
         raise HTTPException(404, "File not found")
     media = "image/jpeg" if path.suffix.lower() in {".jpg", ".jpeg"} else "image/png"
     return FileResponse(path, media_type=media)
+
+
+@router.get("/camera/properties")
+async def get_camera_properties(cam: int = Query(0, ge=0)):
+    """Detect supported camera properties and their current values."""
+    cs = _cam(cam)
+    settings = await state.db.get_all_settings()
+    if cam == 0:
+        dev_idx = int(settings.get("cam_0_device_index", settings.get("camera_index", 0)))
+    else:
+        dev_idx = int(settings.get(f"cam_{cam}_device_index", cam))
+
+    props = await asyncio.to_thread(cs.detect_properties, dev_idx)
+
+    # Override detected values with saved settings
+    for p in props:
+        saved = settings.get(f"cam_{cam}_prop_{p['key']}")
+        if saved is not None:
+            p["value"] = float(saved)
+
+    return {"properties": props, "cam": cam}
+
+
+@router.put("/camera/properties")
+async def set_camera_properties(updates: dict[str, Any], cam: int = Query(0, ge=0)):
+    """Set one or more camera properties (persisted and applied)."""
+    cs = _cam(cam)
+
+    # Save to DB
+    db_updates = {f"cam_{cam}_prop_{k}": v for k, v in updates.items()}
+    await state.db.update_settings(db_updates)
+
+    # Reload all props for this camera and apply
+    settings = await state.db.get_all_settings()
+    cam_props: dict[str, float] = {}
+    for pdef in CAMERA_PROPERTIES:
+        val = settings.get(f"cam_{cam}_prop_{pdef['key']}")
+        if val is not None:
+            cam_props[pdef["key"]] = float(val)
+    cs.set_properties(cam_props)
+
+    return {"ok": True, "cam": cam}
 
 
 @router.get("/preview")

@@ -563,6 +563,84 @@ main {
 }
 .preview-icon { font-size: 2rem; opacity: .35; }
 
+/* Camera property settings */
+.cam-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .6rem 0 .3rem;
+  cursor: pointer;
+  font-size: .8rem;
+  color: var(--text2);
+  border-top: 1px solid var(--border);
+  margin-top: .6rem;
+  user-select: none;
+}
+.cam-settings-header:hover { color: var(--text); }
+.cam-settings-arrow {
+  font-size: .65rem;
+  transition: transform .2s;
+}
+.cam-settings-arrow.open { transform: rotate(90deg); }
+
+.cam-settings { padding: .3rem 0 .5rem; }
+
+.cam-prop-row {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin-bottom: .5rem;
+  font-size: .8rem;
+  transition: opacity .2s;
+}
+.cam-prop-row label {
+  color: var(--text2);
+  min-width: 110px;
+  flex-shrink: 0;
+  font-size: .8rem;
+}
+.cam-prop-row input[type=range] {
+  flex: 1;
+  accent-color: var(--accent);
+  min-width: 80px;
+}
+.cam-prop-val {
+  font-family: var(--font-mono);
+  font-size: .72rem;
+  color: var(--text3);
+  min-width: 45px;
+  text-align: right;
+}
+.cam-prop-row.disabled {
+  opacity: .3;
+  pointer-events: none;
+}
+.cam-prop-row.unsupported {
+  opacity: .25;
+  pointer-events: none;
+}
+.cam-prop-row .toggle-switch {
+  margin-left: 0;
+  width: 34px;
+  min-width: 34px;
+  height: 18px;
+}
+.cam-prop-row .toggle-slider::before {
+  width: 14px;
+  height: 14px;
+  left: 1px;
+  bottom: 1px;
+}
+.cam-prop-row .toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(16px);
+}
+
+.cam-props-hint {
+  font-size: .7rem;
+  color: var(--text3);
+  margin-top: .2rem;
+}
+
 /* ============================================================
    Modal / Settings overlay
 ============================================================ */
