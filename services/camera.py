@@ -96,8 +96,12 @@ class CameraService:
             if key in prop_map:
                 self._cam_props[prop_map[key]] = float(value)
 
-    def _apply_props(self, cap):
-        """Apply stored camera properties to an opened VideoCapture."""
+    def _apply_props(self, cap, warmup_frames: int = 5):
+        """Apply stored camera properties to an opened VideoCapture.
+
+        After setting properties, discard warmup_frames so the camera
+        hardware has time to adjust (first frames still carry old settings).
+        """
         if not self._cam_props:
             return
         # Auto toggles first
@@ -113,6 +117,9 @@ class CameraService:
             if pid == _PROP_FOCUS and self._cam_props.get(_PROP_AUTOFOCUS, 0) > 0.5:
                 continue
             cap.set(pid, val)
+        # Discard initial frames so settings take effect on the hardware
+        for _ in range(warmup_frames):
+            cap.read()
 
     def detect_properties(self, camera_index: int) -> list[dict]:
         """Probe camera for supported properties and their value ranges."""
