@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 from pathlib import Path
 
 from typing import Any
@@ -8,6 +9,7 @@ from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel
 
 import state
+from services import schedule
 from services.camera import CAMERA_PROPERTIES, CameraBusy
 
 router = APIRouter()
@@ -49,6 +51,16 @@ async def get_status(cam: int = Query(0, ge=0)):
         clip_duration= settings.get(f"cam_{cam}_clip_duration", 5)
         clip_fps     = settings.get(f"cam_{cam}_clip_fps", 10)
 
+    cfg = schedule.parse_config(settings, cam)
+    # Der nächste Zeitpunkt wird serverseitig berechnet, damit das Dashboard die
+    # Zeitlogik nicht ein zweites Mal implementieren muss. Im Intervallmodus ohne
+    # Startzeit hängt er an der letzten Aufnahme, die hier nicht bekannt ist –
+    # dann bleibt nur der Einzeltermin, und das Dashboard zeigt sonst das Intervall.
+    if cfg.mode == schedule.MODE_INTERVAL and cfg.start is None:
+        nxt = schedule.next_oneshot(datetime.now(), cfg)
+    else:
+        nxt = schedule.next_due(datetime.now(), cfg, None)
+
     return {
         "cam":             cam,
         "camera_count":    camera_count,
@@ -66,6 +78,15 @@ async def get_status(cam: int = Query(0, ge=0)):
         "target_brightness": settings.get(f"cam_{cam}_target_brightness", 120),
         "brightness_tol":    settings.get(f"cam_{cam}_brightness_tol", 12),
         "warmup_seconds":    settings.get(f"cam_{cam}_warmup_seconds", 1.5),
+        "schedule_mode":  cfg.mode,
+        "schedule_start": cfg.start.strftime("%H:%M") if cfg.start else None,
+        "schedule_end":   cfg.end.strftime("%H:%M") if cfg.end else None,
+        "schedule_times": [t.strftime("%H:%M") for t in cfg.times],
+        "schedule_grace": cfg.grace_seconds,
+        "date_from":      cfg.date_from.isoformat() if cfg.date_from else None,
+        "date_to":        cfg.date_to.isoformat() if cfg.date_to else None,
+        "oneshots":       [m.strftime("%Y-%m-%d %H:%M") for m in cfg.oneshots],
+        "next_due":       nxt.isoformat() if nxt else None,
     }
 
 
@@ -76,7 +97,7 @@ async def start_timelapse(req: StartSessionRequest, cam: int = Query(0, ge=0)):
         raise HTTPException(400, "A timelapse session is already running")
     session = cs.start_session(req.name)
     await state.db.update_settings({f"cam_{cam}_timelapse_active": True})
-    state.timelapse_wake.set()
+    state.get_timelapse_wake(cam).set()
     return {"session": session, "cam": cam}
 
 
@@ -85,7 +106,7 @@ async def stop_timelapse(cam: int = Query(0, ge=0)):
     cs = _cam(cam)
     session = cs.stop_session()
     await state.db.update_settings({f"cam_{cam}_timelapse_active": False})
-    state.timelapse_wake.set()
+    state.get_timelapse_wake(cam).set()
     return {"stopped_session": session, "cam": cam}
 
 

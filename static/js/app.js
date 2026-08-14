@@ -541,10 +541,55 @@ function buildCameraSection(ci) {
           </div>
         </div>
       </div>
-      <div class="control-row" data-tooltip="Zeitabstand zwischen zwei Timelapse-Aufnahmen in Stunden.">
-        <label>Intervall (Stunden)</label>
-        <input type="text" inputmode="decimal" id="tl-interval-${ci}" placeholder="0,0014" />
+      <div class="control-row" data-tooltip="Intervall: Aufnahmen im festen Zeitabstand. Feste Uhrzeiten: eine Aufnahme zu jeder eingestellten Uhrzeit, täglich wiederholt.">
+        <label>Zeitplan</label>
+        <select id="tl-schedule-mode-${ci}" onchange="updateScheduleUI(${ci}); saveSchedule(${ci})">
+          <option value="interval">Intervall</option>
+          <option value="times">Feste Uhrzeiten</option>
+        </select>
       </div>
+
+      <div id="tl-interval-block-${ci}">
+        <div class="control-row" data-tooltip="Ab wann am Tag aufgenommen wird. Leer lassen: Intervall läuft ab dem Start der Aufnahme.">
+          <label>Ab Uhrzeit</label>
+          <input type="time" id="tl-start-${ci}" onchange="saveSchedule(${ci})" />
+        </div>
+        <div class="control-row" data-tooltip="Bis wann am Tag aufgenommen wird. Leer lassen: läuft durch, auch über Mitternacht.">
+          <label>Bis Uhrzeit</label>
+          <input type="time" id="tl-end-${ci}" onchange="saveSchedule(${ci})" />
+        </div>
+        <div class="control-row" data-tooltip="Zeitabstand zwischen zwei Timelapse-Aufnahmen in Stunden.">
+          <label>Intervall (Stunden)</label>
+          <input type="text" inputmode="decimal" id="tl-interval-${ci}" placeholder="0,0014"
+                 onchange="saveSchedule(${ci})" />
+        </div>
+      </div>
+
+      <div id="tl-times-block-${ci}" class="hidden">
+        <div class="control-row" data-tooltip="Anzahl der Aufnahmen pro Tag. Für jede erscheint ein Uhrzeitfeld.">
+          <label>Bilder pro Tag</label>
+          <input type="number" id="tl-times-count-${ci}" min="1" max="24" step="1" value="3"
+                 onchange="renderTimeFields(${ci}); saveSchedule(${ci})" />
+        </div>
+        <div id="tl-times-fields-${ci}" class="tl-times-grid"></div>
+      </div>
+
+      <div class="control-row" data-tooltip="Erster Tag des Zeitraums. Leer lassen: ab sofort.">
+        <label>Von Datum</label>
+        <input type="date" id="tl-date-from-${ci}" onchange="saveSchedule(${ci})" />
+      </div>
+      <div class="control-row" data-tooltip="Letzter Tag des Zeitraums, einschließlich. Leer lassen: ohne Ende.">
+        <label>Bis Datum</label>
+        <input type="date" id="tl-date-to-${ci}" onchange="saveSchedule(${ci})" />
+      </div>
+
+      <div class="control-row" data-tooltip="Zusätzliche Aufnahmen zu einem festen Datum mit Uhrzeit. Sie gelten unabhängig vom Zeitraum.">
+        <label>Einzeltermine</label>
+        <button class="btn-small" onclick="addOneshot(${ci})" title="Termin hinzufügen">+</button>
+      </div>
+      <div id="tl-oneshots-${ci}" class="tl-oneshots"></div>
+
+      <div class="tl-next-due" id="tl-next-due-${ci}"></div>
       <div class="control-row" data-tooltip="Hardware-Kamera auswählen.">
         <label>Kamera</label>
         <div class="cam-select-wrap">
@@ -628,6 +673,179 @@ function buildCameraSection(ci) {
       </div>
     </div>
   </section>`;
+}
+
+// --- Zeitplan-Bedienung ---
+
+function updateScheduleUI(ci) {
+  const mode = document.getElementById(`tl-schedule-mode-${ci}`).value;
+  document.getElementById(`tl-interval-block-${ci}`).classList.toggle('hidden', mode !== 'interval');
+  document.getElementById(`tl-times-block-${ci}`).classList.toggle('hidden', mode !== 'times');
+  if (mode === 'times' && !collectTimes(ci).length) renderTimeFields(ci);
+}
+
+function minutesToHHMM(total) {
+  const m = ((total % 1440) + 1440) % 1440;
+  return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+}
+
+function defaultTimes(n) {
+  // Gleichmäßig zwischen 06:00 und 18:00, auf 5 Minuten gerundet.
+  // Eine einzelne Aufnahme landet in der Tagesmitte.
+  const START = 6 * 60, SPAN = 12 * 60;
+  const out = [];
+  for (let k = 0; k < n; k++) {
+    const offset = n === 1 ? SPAN / 2 : (SPAN * k) / (n - 1);
+    out.push(minutesToHHMM(Math.round((START + offset) / 5) * 5));
+  }
+  return out;
+}
+
+const TIME_RE    = /^\d{2}:\d{2}(:\d{2})?$/;
+const ONESHOT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
+
+function sameSet(a, b) {
+  const norm = list => JSON.stringify([...new Set(list)].sort());
+  return norm(a) === norm(b);
+}
+
+function collectTimes(ci) {
+  const out = [];
+  document.querySelectorAll(`#tl-times-fields-${ci} input[type=time]`).forEach(el => {
+    if (el.value) out.push(el.value);
+  });
+  return out;
+}
+
+function fillTimes(existing, n) {
+  // Neue Plätze bekommen nur Uhrzeiten, die noch nicht vergeben sind: der
+  // Server verwirft Duplikate, die Anzahl fiele sonst wieder zurück.
+  const out  = existing.slice(0, n).filter(t => TIME_RE.test(t));
+  const used = new Set(out);
+  const pool = defaultTimes(n).filter(t => !used.has(t));
+
+  let probe = 0;
+  while (out.length < n) {
+    let next = pool.shift();
+    while (!next || used.has(next)) {
+      if (probe > 287) return out;   // 24 h im 5-Minuten-Raster abgesucht
+      next = minutesToHHMM(probe * 5);
+      probe++;
+    }
+    used.add(next);
+    out.push(next);
+  }
+  return out;
+}
+
+function renderTimeFields(ci, preset) {
+  const host  = document.getElementById(`tl-times-fields-${ci}`);
+  const input = document.getElementById(`tl-times-count-${ci}`);
+  if (!host || !input) return;
+
+  const n = Math.max(1, Math.min(24, parseInt(input.value) || 1));
+  input.value = n;
+
+  // Bereits gesetzte Uhrzeiten überleben eine Änderung der Anzahl.
+  const values = fillTimes(preset || collectTimes(ci), n);
+
+  host.innerHTML = values.map((value, k) => `<label class="tl-time-field">
+      <span>${k + 1}.</span>
+      <input type="time" id="tl-time-${ci}-${k}" value="${value}" onchange="saveSchedule(${ci})" />
+    </label>`).join('');
+}
+
+// --- Einzeltermine ---
+// Die Felder liefern "YYYY-MM-DDTHH:MM"; der Server nimmt beide Trenner an und
+// liefert die Leerzeichen-Form zurück.
+
+const MAX_ONESHOTS = 50;
+
+function collectOneshots(ci) {
+  const out = [];
+  document.querySelectorAll(`#tl-oneshots-${ci} input[type=datetime-local]`).forEach(el => {
+    if (el.value) out.push(el.value);
+  });
+  return out;
+}
+
+function renderOneshots(ci, preset) {
+  const host = document.getElementById(`tl-oneshots-${ci}`);
+  if (!host) return;
+  const shots = (preset || collectOneshots(ci))
+    .map(v => String(v).replace(' ', 'T'))
+    .map(v => (ONESHOT_RE.test(v) ? v : ''));
+
+  host.innerHTML = shots.map((value, k) => `
+    <div class="tl-oneshot-row">
+      <input type="datetime-local" id="tl-oneshot-${ci}-${k}" value="${value}"
+             onchange="saveSchedule(${ci})" />
+      <button class="btn-small" onclick="removeOneshot(${ci}, ${k})" title="Termin entfernen">&#10005;</button>
+    </div>`).join('');
+}
+
+function addOneshot(ci) {
+  const shots = collectOneshots(ci);
+  if (shots.length >= MAX_ONESHOTS) {
+    showToast(`Höchstens ${MAX_ONESHOTS} Einzeltermine`);
+    return;
+  }
+  // Leeres Feld: wird erst gespeichert, wenn eine Zeit darin steht.
+  renderOneshots(ci, [...shots, '']);
+}
+
+function removeOneshot(ci, k) {
+  const shots = collectOneshots(ci);
+  shots.splice(k, 1);
+  renderOneshots(ci, shots);
+  saveSchedule(ci);
+}
+
+// --- Zeitplan speichern und nächste Aufnahme anzeigen ---
+
+function scheduleBody(ci) {
+  const mode  = document.getElementById(`tl-schedule-mode-${ci}`).value;
+  const start = document.getElementById(`tl-start-${ci}`).value;
+  const end   = document.getElementById(`tl-end-${ci}`).value;
+  const from  = document.getElementById(`tl-date-from-${ci}`).value;
+  const to    = document.getElementById(`tl-date-to-${ci}`).value;
+  const hours = parseDE(document.getElementById(`tl-interval-${ci}`).value);
+
+  return {
+    [`cam_${ci}_schedule_mode`]:  mode,
+    [`cam_${ci}_schedule_start`]: start || null,
+    [`cam_${ci}_schedule_end`]:   end   || null,
+    [`cam_${ci}_schedule_times`]: collectTimes(ci),
+    [`cam_${ci}_date_from`]:      from || null,
+    [`cam_${ci}_date_to`]:        to   || null,
+    [`cam_${ci}_oneshots`]:       collectOneshots(ci),
+    [`cam_${ci}_timelapse_interval`]: isNaN(hours) ? 300 : Math.max(1, Math.round(hours * 3600)),
+  };
+}
+
+async function saveSchedule(ci) {
+  await fetch(`${API}/api/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(scheduleBody(ci)),
+  });
+  showToast('Zeitplan gespeichert');
+  fetchTimelapse(ci);
+}
+
+function renderNextDue(ci, iso) {
+  const el = document.getElementById(`tl-next-due-${ci}`);
+  if (!el) return;
+  if (!iso) { el.textContent = ''; return; }
+
+  const d = new Date(iso);
+  if (isNaN(d)) { el.textContent = ''; return; }
+
+  const now  = new Date();
+  const time = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  const sameDay = d.toDateString() === now.toDateString();
+  const day = sameDay ? 'heute' : d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+  el.textContent = `Nächste Aufnahme: ${day} ${time}`;
 }
 
 async function initCameraSections() {
@@ -800,12 +1018,36 @@ async function fetchTimelapse(ci) {
       document.getElementById(`btn-tl-stop-${ci}`).disabled  = true;
     }
 
+    document.getElementById(`tl-schedule-mode-${ci}`).value = d.schedule_mode ?? 'interval';
+    document.getElementById(`tl-start-${ci}`).value     = d.schedule_start ?? '';
+    document.getElementById(`tl-end-${ci}`).value       = d.schedule_end   ?? '';
+    document.getElementById(`tl-date-from-${ci}`).value = d.date_from ?? '';
+    document.getElementById(`tl-date-to-${ci}`).value   = d.date_to   ?? '';
+
+    // Uhrzeiten und Termine nur nachziehen, wenn der Server wirklich etwas
+    // anderes hat. Verglichen wird die Menge, nicht die Reihenfolge: der Server
+    // sortiert, die Felder stehen in Eingabereihenfolge – sonst würde jeder
+    // Speichervorgang die Felder unter dem Cursor neu aufbauen.
+    const serverTimes = d.schedule_times ?? [];
+    if (!sameSet(serverTimes, collectTimes(ci))) {
+      document.getElementById(`tl-times-count-${ci}`).value = Math.max(1, serverTimes.length || 3);
+      renderTimeFields(ci, serverTimes);
+    }
+    const serverShots = (d.oneshots ?? []).map(v => String(v).replace(' ', 'T'));
+    if (!sameSet(serverShots, collectOneshots(ci))) {
+      renderOneshots(ci, serverShots);
+    }
+
     const tlIntervalEl = document.getElementById(`tl-interval-${ci}`);
     const serverSecs   = d.interval ?? 3600;
     const uiSecs       = Math.round(parseDE(tlIntervalEl.value) * 3600);
     if (isNaN(uiSecs) || uiSecs === serverSecs) {
       tlIntervalEl.value = formatDE(serverSecs / 3600, 4);
     }
+
+    updateScheduleUI(ci);
+    renderNextDue(ci, d.next_due);
+
     document.getElementById(`tl-capture-mode-${ci}`).value = d.capture_mode ?? 'still';
     document.getElementById(`tl-clip-duration-${ci}`).value = d.clip_duration ?? 5;
     document.getElementById(`tl-clip-fps-${ci}`).value = d.clip_fps ?? 10;
@@ -875,8 +1117,6 @@ function renderSessions(ci, sessions) {
 }
 
 async function startTimelapse(ci) {
-  const intervalHours = parseDE(document.getElementById(`tl-interval-${ci}`).value);
-  const intervalSecs  = Math.round(intervalHours * 3600);
   const devIdx        = parseInt(document.getElementById(`tl-cam-idx-${ci}`).value);
   const resSel        = document.getElementById(`tl-resolution-${ci}`);
   const [capW, capH]  = resSel.value.split('x').map(Number);
@@ -885,7 +1125,7 @@ async function startTimelapse(ci) {
   const clipFps       = parseInt(document.getElementById(`tl-clip-fps-${ci}`).value);
 
   const body = {
-    [`cam_${ci}_timelapse_interval`]: intervalSecs,
+    ...scheduleBody(ci),
     [`cam_${ci}_device_index`]: devIdx,
     [`cam_${ci}_capture_mode`]: captureMode,
     [`cam_${ci}_clip_duration`]: clipDuration,

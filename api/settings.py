@@ -44,6 +44,18 @@ async def update_settings(updates: dict[str, Any]):
         cam = state.get_camera(i)
         cam.setup(**camera_setup_kwargs(settings, i, tl_path))
 
+    # Betroffene Timelapse-Loops sofort wecken, damit ein geänderter Zeitplan
+    # nicht erst beim nächsten Poll greift.
+    schedule_pattern = re.compile(
+        r"cam_(\d+)_(schedule_\w+|timelapse_interval|date_from|date_to|oneshots)$"
+    )
+    for k in updates:
+        m = schedule_pattern.match(k)
+        if m:
+            state.get_timelapse_wake(int(m.group(1))).set()
+    if "timelapse_interval" in updates:
+        state.get_timelapse_wake(0).set()
+
     # Initialize new camera instances when camera_count increases
     if "camera_count" in updates:
         for i in range(camera_count):

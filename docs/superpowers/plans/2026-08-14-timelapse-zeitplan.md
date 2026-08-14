@@ -1349,3 +1349,552 @@ git commit -m "feat(ui): persist timelapse schedule and show the next capture ti
 - [ ] Während einer laufenden Aufnahme den Dienst neu starten (`sudo systemctl restart greenhouse`). Erwartet im Log eine Meldung „verfallen" nur dann, wenn ein Zeitpunkt tatsächlich in die Ausfallzeit fiel — und keine sofortige Nachhol-Aufnahme.
 - [ ] Zeitplan im Dashboard ändern, während die Aufnahme läuft. Erwartet: „Nächste Aufnahme" aktualisiert sich innerhalb weniger Sekunden, nicht erst nach einer Minute.
 - [ ] Bei zwei konfigurierten Kameras beide mit unterschiedlichen Zeitplänen starten. Erwartet: die Zeitpläne beeinflussen sich nicht gegenseitig (Prüfung des Wake-Events pro Kamera).
+
+---
+
+# Nachtrag: Datumsangaben und Nacht-Semantik
+
+Nach Tasks 1–3 vom Nutzer entschieden. Zwei Änderungen an der Zeitplan-Logik und
+entsprechend erweiterte Bedienung. Die Tasks 9 und 10 kommen hinzu, die Tasks 6, 7 und 8
+werden ergänzt.
+
+**Entscheidung 1 — Nacht-Semantik.** Intervall mit Startzeit und ohne Endzeit: die Startzeit
+gilt nur für den ersten Tag. Ist noch nichts aufgenommen und liegt `now` vor der heutigen
+Startzeit, wird bis dahin gewartet. Danach läuft das Raster lückenlos weiter, auch über
+Mitternacht. Damit löst eine um 04:00 gestartete Aufnahme nicht sofort um 04:30 aus, und ab
+dem zweiten Tag entsteht keine Lücke zwischen Mitternacht und der Startzeit.
+
+**Entscheidung 2 — Datum.** Zwei Dinge zugleich: ein Zeitraum `von`/`bis`, der den
+wiederkehrenden Zeitplan begrenzt, und zusätzlich eine Liste einzelner Termine mit eigenem
+Datum, die genau einmal auslösen.
+
+---
+
+### Task 9: Nacht-Semantik und Zeitraum
+
+**Files:**
+- Modify: `services/schedule.py`
+- Create: `tests/test_schedule_dates.py`
+
+**Interfaces:**
+- Consumes: `ScheduleConfig`, `next_due`, `_interval_next` aus Tasks 1–3
+- Produces:
+  - `ScheduleConfig` zusätzlich mit `date_from: date | None` und `date_to: date | None`
+  - `schedule.parse_date(value) -> date | None`
+  - `_interval_next` mit korrigierter Anker-Wahl
+
+- [ ] **Step 1: Failing test schreiben**
+
+`tests/test_schedule_dates.py`:
+
+```python
+from datetime import date, datetime, time
+
+from services import schedule
+
+
+def _cfg(**over):
+    base = dict(
+        mode=schedule.MODE_INTERVAL,
+        interval_seconds=1800.0,
+        start=None,
+        end=None,
+        times=(),
+        grace_seconds=300.0,
+        date_from=None,
+        date_to=None,
+    )
+    base.update(over)
+    return schedule.ScheduleConfig(**base)
+
+
+# --- parse_date ---
+
+def test_parse_date_iso():
+    assert schedule.parse_date("2026-04-01") == date(2026, 4, 1)
+
+
+def test_parse_date_rejects_nonsense():
+    assert schedule.parse_date(None) is None
+    assert schedule.parse_date("") is None
+    assert schedule.parse_date("01.04.2026") is None
+    assert schedule.parse_date("2026-13-01") is None
+    assert schedule.parse_date(42) is None
+
+
+def test_parse_config_reads_dates():
+    cfg = schedule.parse_config(
+        {"cam_0_date_from": "2026-04-01", "cam_0_date_to": "2026-06-30"}, 0
+    )
+    assert cfg.date_from == date(2026, 4, 1)
+    assert cfg.date_to == date(2026, 6, 30)
+
+
+def test_parse_config_dates_default_to_none():
+    cfg = schedule.parse_config({}, 0)
+    assert cfg.date_from is None and cfg.date_to is None
+
+
+# --- Nacht-Semantik: Startzeit gilt nur am ersten Tag ---
+
+def test_waits_for_start_on_the_first_day():
+    """Um 04:00 gestartet, ab 06:00 - nicht sofort um 04:30 ausloesen."""
+    cfg = _cfg(start=time(6, 0))
+    assert schedule.next_due(datetime(2026, 8, 14, 4, 0), cfg, None) == datetime(2026, 8, 14, 6, 0)
+
+
+def test_runs_continuously_once_something_was_captured():
+    """Nach der ersten Aufnahme laeuft das Raster auch nachts weiter."""
+    cfg = _cfg(start=time(6, 0))
+    last = datetime(2026, 8, 14, 23, 30)
+    assert schedule.next_due(datetime(2026, 8, 15, 4, 0), cfg, last) == datetime(2026, 8, 15, 4, 30)
+
+
+def test_no_gap_across_midnight_after_first_day():
+    cfg = _cfg(start=time(6, 0), interval_seconds=3600.0)
+    last = datetime(2026, 8, 14, 23, 0)
+    assert schedule.next_due(datetime(2026, 8, 14, 23, 50), cfg, last) == datetime(2026, 8, 15, 0, 0)
+
+
+def test_started_after_the_start_time_captures_on_the_raster():
+    """Um 20:10 gestartet, ab 06:00 - das Raster laeuft heute bereits."""
+    cfg = _cfg(start=time(6, 0))
+    assert schedule.next_due(datetime(2026, 8, 14, 20, 10), cfg, None) == datetime(2026, 8, 14, 20, 30)
+
+
+def test_bounded_window_is_unaffected_by_the_first_day_rule():
+    cfg = _cfg(start=time(22, 0), end=time(4, 0))
+    assert schedule.next_due(datetime(2026, 8, 14, 2, 10), cfg, None) == datetime(2026, 8, 14, 2, 30)
+
+
+def test_odd_interval_has_no_gap_after_the_first_day():
+    """7000 s teilt 24 h nicht glatt - das Raster darf trotzdem nicht neu ansetzen."""
+    cfg = _cfg(start=time(6, 0), interval_seconds=7000.0)
+    last = datetime(2026, 8, 15, 1, 26, 40)
+    nxt = schedule.next_due(datetime(2026, 8, 15, 1, 30), cfg, last)
+    assert nxt == datetime(2026, 8, 15, 3, 23, 20)
+
+
+# --- Zeitraum ---
+
+def test_before_date_from_yields_nothing():
+    cfg = _cfg(start=time(6, 0), date_from=date(2026, 9, 1))
+    assert schedule.next_due(datetime(2026, 8, 14, 10, 0), cfg, None) is None
+
+
+def test_first_day_of_range_starts_at_the_start_time():
+    cfg = _cfg(start=time(6, 0), date_from=date(2026, 8, 14))
+    assert schedule.next_due(datetime(2026, 8, 14, 4, 0), cfg, None) == datetime(2026, 8, 14, 6, 0)
+
+
+def test_after_date_to_yields_nothing():
+    cfg = _cfg(start=time(6, 0), date_to=date(2026, 8, 13))
+    assert schedule.next_due(datetime(2026, 8, 14, 10, 0), cfg, None) is None
+
+
+def test_date_to_is_inclusive():
+    cfg = _cfg(mode=schedule.MODE_TIMES, times=(time(12, 0),), date_to=date(2026, 8, 14))
+    assert schedule.next_due(datetime(2026, 8, 14, 9, 0), cfg, None) == datetime(2026, 8, 14, 12, 0)
+
+
+def test_times_mode_stops_after_date_to():
+    cfg = _cfg(mode=schedule.MODE_TIMES, times=(time(12, 0),), date_to=date(2026, 8, 14))
+    assert schedule.next_due(datetime(2026, 8, 14, 13, 0), cfg, None) is None
+
+
+def test_range_without_bounds_behaves_as_before():
+    cfg = _cfg(mode=schedule.MODE_TIMES, times=(time(12, 0),))
+    assert schedule.next_due(datetime(2026, 8, 14, 13, 0), cfg, None) == datetime(2026, 8, 15, 12, 0)
+```
+
+- [ ] **Step 2: Test ausführen, Fehlschlag bestätigen**
+
+Run: `python -m pytest tests/test_schedule_dates.py -v`
+Expected: FAIL mit `TypeError: ScheduleConfig.__init__() got an unexpected keyword argument 'date_from'`
+
+- [ ] **Step 3: Datum in Konfiguration und Parsing**
+
+In `services/schedule.py` den Import erweitern und `ScheduleConfig` um zwei Felder ergänzen.
+Beide bekommen einen Default, damit bestehende Konstruktoraufrufe in den älteren Testdateien
+unverändert weiterlaufen:
+
+```python
+from datetime import date, datetime, time, timedelta
+```
+
+```python
+@dataclass(frozen=True)
+class ScheduleConfig:
+    mode: str
+    interval_seconds: float
+    start: time | None
+    end: time | None
+    times: tuple[time, ...]
+    grace_seconds: float
+    date_from: date | None = None
+    date_to: date | None = None
+```
+
+```python
+def parse_date(value) -> date | None:
+    """YYYY-MM-DD in ein date-Objekt. Sonst None."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return date.fromisoformat(value.strip())
+    except ValueError:
+        return None
+```
+
+In `parse_config` die beiden Felder im Konstruktoraufruf ergänzen:
+
+```python
+        date_from=parse_date(cam_get("date_from", None)),
+        date_to=parse_date(cam_get("date_to", None)),
+```
+
+- [ ] **Step 4: Zeitraum in `next_due` durchsetzen**
+
+Der Zeitraum wird als äußere Schale um beide Modi gelegt, damit ihn keiner von beiden
+vergessen kann:
+
+```python
+def next_due(
+    now: datetime,
+    cfg: ScheduleConfig,
+    last_capture: datetime | None,
+) -> datetime | None:
+    """Nächster Aufnahmezeitpunkt, oder None wenn keiner bestimmbar ist.
+
+    Der optionale Zeitraum date_from..date_to begrenzt den Plan. date_to ist
+    einschliesslich: am Enddatum wird noch aufgenommen. Vor date_from wird None
+    geliefert; der Loop fragt beim naechsten Durchlauf erneut.
+    """
+    if cfg.date_from is not None and now.date() < cfg.date_from:
+        return None
+
+    if cfg.mode == MODE_TIMES:
+        candidate = _times_next(now, cfg)
+    else:
+        candidate = _interval_next(now, cfg, last_capture)
+
+    if candidate is None:
+        return None
+    if cfg.date_to is not None and candidate.date() > cfg.date_to:
+        return None
+    return candidate
+```
+
+- [ ] **Step 5: Erste-Tag-Regel in `_interval_next`**
+
+Der bisherige Code beschränkt den Tagesversatz `-1` auf `cfg.end is not None`. Das verhindert
+zwar, dass eine frisch gestartete Aufnahme sofort auf dem Raster von gestern auslöst, sorgt
+aber dafür, dass ab dem zweiten Tag zwischen Mitternacht und der Startzeit eine Lücke klafft.
+Die Unterscheidung gehört an `last_capture`, nicht an `cfg.end`.
+
+Vor der Schleife über die Tagesversätze einfügen:
+
+```python
+    # Erste-Tag-Regel: Solange nichts aufgenommen wurde und die heutige Startzeit
+    # noch bevorsteht, wird auf sie gewartet. Ohne diese Regel wuerde eine um 04:00
+    # gestartete Aufnahme sofort auf dem Raster von gestern ausloesen.
+    if cfg.end is None and last_capture is None:
+        today_start = datetime.combine(now.date(), cfg.start)
+        if now < today_start:
+            return today_start
+```
+
+und die Versatz-Auswahl ersetzen durch:
+
+```python
+    # Versatz -1 deckt zwei Faelle ab: ein Fenster, das ueber Mitternacht laeuft,
+    # und ein unbegrenztes Raster, das nach der ersten Aufnahme lueckenlos
+    # weiterlaufen soll.
+    offsets = (-1, 0, 1) if (cfg.end is not None or last_capture is not None) else (0, 1)
+    for day_offset in offsets:
+```
+
+Der restliche Rumpf der Schleife bleibt unverändert.
+
+- [ ] **Step 6: Tests ausführen**
+
+Run: `python -m pytest tests/test_schedule_dates.py -v`
+Expected: 16 passed
+
+Run: `python -m pytest`
+Expected: alles grün, insbesondere die 18 Tests aus `tests/test_schedule_interval.py`
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add services/schedule.py tests/test_schedule_dates.py
+git commit -m "feat(schedule): honour the start time on day one and bound the plan by date"
+```
+
+---
+
+### Task 10: Einzeltermine mit Datum
+
+**Files:**
+- Modify: `services/schedule.py`
+- Create: `tests/test_schedule_oneshots.py`
+
+**Interfaces:**
+- Consumes: `next_due`, `ScheduleConfig` aus Task 9
+- Produces:
+  - `ScheduleConfig` zusätzlich mit `oneshots: tuple[datetime, ...]`
+  - `schedule.parse_datetime(value) -> datetime | None`
+  - `_recurring_next` und `_oneshot_next` als interne Aufteilung von `next_due`
+
+Einzeltermine laufen unabhängig vom Modus und unabhängig vom Zeitraum: sie tragen ihr Datum
+selbst. Sie brauchen keinen Zustand, um nur einmal auszulösen — ein Termin in der
+Vergangenheit wird schlicht nicht mehr zurückgegeben.
+
+- [ ] **Step 1: Failing test schreiben**
+
+`tests/test_schedule_oneshots.py`:
+
+```python
+from datetime import date, datetime, time
+
+from services import schedule
+
+
+def _cfg(**over):
+    base = dict(
+        mode=schedule.MODE_TIMES,
+        interval_seconds=1800.0,
+        start=None,
+        end=None,
+        times=(),
+        grace_seconds=300.0,
+        date_from=None,
+        date_to=None,
+        oneshots=(),
+    )
+    base.update(over)
+    return schedule.ScheduleConfig(**base)
+
+
+def test_parse_datetime_accepts_space_and_t():
+    assert schedule.parse_datetime("2026-04-01 08:00") == datetime(2026, 4, 1, 8, 0)
+    assert schedule.parse_datetime("2026-04-01T08:00") == datetime(2026, 4, 1, 8, 0)
+
+
+def test_parse_datetime_rejects_nonsense():
+    assert schedule.parse_datetime(None) is None
+    assert schedule.parse_datetime("") is None
+    assert schedule.parse_datetime("2026-04-01") is None
+    assert schedule.parse_datetime("morgen frueh") is None
+
+
+def test_parse_config_reads_and_sorts_oneshots():
+    cfg = schedule.parse_config(
+        {"cam_0_oneshots": ["2026-05-01 12:00", "2026-04-01 08:00", "kaputt"]}, 0
+    )
+    assert cfg.oneshots == (
+        datetime(2026, 4, 1, 8, 0),
+        datetime(2026, 5, 1, 12, 0),
+    )
+
+
+def test_oneshot_alone_is_returned():
+    cfg = _cfg(oneshots=(datetime(2026, 4, 1, 8, 0),))
+    assert schedule.next_due(datetime(2026, 3, 31, 9, 0), cfg, None) == datetime(2026, 4, 1, 8, 0)
+
+
+def test_past_oneshot_is_ignored():
+    cfg = _cfg(oneshots=(datetime(2026, 4, 1, 8, 0),))
+    assert schedule.next_due(datetime(2026, 4, 1, 9, 0), cfg, None) is None
+
+
+def test_oneshot_fires_once_then_the_next_one():
+    cfg = _cfg(oneshots=(datetime(2026, 4, 1, 8, 0), datetime(2026, 5, 1, 8, 0)))
+    assert schedule.next_due(datetime(2026, 4, 1, 8, 0), cfg, None) == datetime(2026, 5, 1, 8, 0)
+
+
+def test_earlier_of_oneshot_and_recurring_wins():
+    cfg = _cfg(times=(time(12, 0),), oneshots=(datetime(2026, 4, 1, 8, 0),))
+    assert schedule.next_due(datetime(2026, 4, 1, 6, 0), cfg, None) == datetime(2026, 4, 1, 8, 0)
+
+
+def test_recurring_wins_when_it_comes_first():
+    cfg = _cfg(times=(time(12, 0),), oneshots=(datetime(2026, 4, 1, 18, 0),))
+    assert schedule.next_due(datetime(2026, 4, 1, 6, 0), cfg, None) == datetime(2026, 4, 1, 12, 0)
+
+
+def test_oneshot_ignores_the_date_range():
+    """Ein Einzeltermin traegt sein Datum selbst und gilt auch ausserhalb des Zeitraums."""
+    cfg = _cfg(
+        times=(time(12, 0),),
+        date_to=date(2026, 4, 1),
+        oneshots=(datetime(2026, 9, 1, 8, 0),),
+    )
+    assert schedule.next_due(datetime(2026, 8, 14, 6, 0), cfg, None) == datetime(2026, 9, 1, 8, 0)
+
+
+def test_no_recurring_and_no_oneshot_yields_none():
+    assert schedule.next_due(datetime(2026, 4, 1, 6, 0), _cfg(), None) is None
+```
+
+- [ ] **Step 2: Test ausführen, Fehlschlag bestätigen**
+
+Run: `python -m pytest tests/test_schedule_oneshots.py -v`
+Expected: FAIL mit `TypeError: ScheduleConfig.__init__() got an unexpected keyword argument 'oneshots'`
+
+- [ ] **Step 3: Implementieren**
+
+`ScheduleConfig` erweitern, wieder mit Default:
+
+```python
+    oneshots: tuple[datetime, ...] = ()
+```
+
+Konstante und Parser ergänzen:
+
+```python
+# Mehr als 50 Einzeltermine sind im Dashboard nicht mehr sinnvoll pflegbar.
+MAX_ONESHOTS = 50
+
+
+def parse_datetime(value) -> datetime | None:
+    """YYYY-MM-DD HH:MM oder mit T als Trenner. Sonst None."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return datetime.fromisoformat(value.strip().replace(" ", "T"))
+    except ValueError:
+        return None
+```
+
+`parse_datetime("2026-04-01")` liefert ein `datetime` mit Uhrzeit 00:00 und wäre damit gültig,
+obwohl keine Uhrzeit angegeben wurde. Das ist unerwünscht — ein Einzeltermin ohne Uhrzeit ist
+eine unvollständige Eingabe. Deshalb zusätzlich ablehnen, wenn kein Trennzeichen vorhanden war:
+
+```python
+def parse_datetime(value) -> datetime | None:
+    """YYYY-MM-DD HH:MM oder mit T als Trenner. Sonst None.
+
+    Ein reines Datum ohne Uhrzeit wird abgelehnt: es waere eine unvollstaendige
+    Eingabe, die stillschweigend als Mitternacht durchginge.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip().replace(" ", "T")
+    if "T" not in text:
+        return None
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+```
+
+In `parse_config` vor dem Konstruktoraufruf:
+
+```python
+    raw_shots = cam_get("oneshots", [])
+    shots = {parse_datetime(v) for v in raw_shots} if isinstance(raw_shots, list) else set()
+    shots.discard(None)
+```
+
+und im Konstruktoraufruf `oneshots=tuple(sorted(shots))[:MAX_ONESHOTS],`.
+
+`next_due` wird aufgeteilt, damit die Zeitraum-Begrenzung nur den wiederkehrenden Teil betrifft:
+
+```python
+def next_due(
+    now: datetime,
+    cfg: ScheduleConfig,
+    last_capture: datetime | None,
+) -> datetime | None:
+    """Nächster Aufnahmezeitpunkt aus wiederkehrendem Plan und Einzelterminen.
+
+    Einzeltermine tragen ihr Datum selbst und sind vom Zeitraum unberuehrt.
+    Geliefert wird der frueheste Kandidat, oder None wenn es keinen gibt.
+    """
+    candidates = [
+        c
+        for c in (_recurring_next(now, cfg, last_capture), _oneshot_next(now, cfg))
+        if c is not None
+    ]
+    return min(candidates) if candidates else None
+
+
+def _recurring_next(
+    now: datetime, cfg: ScheduleConfig, last_capture: datetime | None
+) -> datetime | None:
+    if cfg.date_from is not None and now.date() < cfg.date_from:
+        return None
+    candidate = (
+        _times_next(now, cfg)
+        if cfg.mode == MODE_TIMES
+        else _interval_next(now, cfg, last_capture)
+    )
+    if candidate is None:
+        return None
+    if cfg.date_to is not None and candidate.date() > cfg.date_to:
+        return None
+    return candidate
+
+
+def _oneshot_next(now: datetime, cfg: ScheduleConfig) -> datetime | None:
+    for moment in cfg.oneshots:
+        if moment > now:
+            return moment
+    return None
+```
+
+- [ ] **Step 4: Tests ausführen**
+
+Run: `python -m pytest tests/test_schedule_oneshots.py -v`
+Expected: 10 passed
+
+Run: `python -m pytest`
+Expected: alles grün
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add services/schedule.py tests/test_schedule_oneshots.py
+git commit -m "feat(schedule): add one-shot appointments with their own date"
+```
+
+---
+
+### Ergänzungen zu Task 6, 7 und 8
+
+Diese Punkte werden in die jeweiligen Tasks eingearbeitet, nicht separat ausgeführt.
+
+**Task 6** liefert im Status zusätzlich `date_from`, `date_to` und `oneshots`, und das
+Wake-Muster in `api/settings.py` erfasst die neuen Schlüssel. Neue Defaults in
+`db/database.py`:
+
+```python
+    "cam_0_date_from": None,
+    "cam_0_date_to": None,
+    "cam_0_oneshots": [],
+```
+
+**Task 7** ergänzt oberhalb des Modus-Umschalters einen Zeitraum-Block und unterhalb der
+Uhrzeitfelder einen Block für Einzeltermine:
+
+```
+Zeitraum von  [01.04.2026]   bis  [30.06.2026]   (beide optional)
+
+Zeitplan   ( ) Intervall   ( ) Feste Uhrzeiten
+   ... wie bisher ...
+
+Einzeltermine
+  1. [01.04.2026] [08:00]   [x]
+  2. [15.04.2026] [08:00]   [x]
+  [+ Termin hinzufügen]
+```
+
+Einzeltermine sind eine dynamische Liste mit Hinzufügen- und Entfernen-Knopf, höchstens 50.
+Ein Termin zählt nur, wenn beide Felder gefüllt sind; unvollständige Zeilen werden beim
+Speichern verworfen. Bereits vergangene Termine werden ausgegraut dargestellt, aber nicht
+gelöscht — der Nutzer soll sehen, was er eingetragen hatte.
+
+**Task 8** speichert die neuen Felder mit: `cam_N_date_from` und `cam_N_date_to` als
+`"YYYY-MM-DD"` oder `null`, `cam_N_oneshots` als Liste von `"YYYY-MM-DD HH:MM"`. Die Anzeige
+„Nächste Aufnahme" nennt bei einem Zeitpunkt, der nicht heute liegt, zusätzlich das Datum.

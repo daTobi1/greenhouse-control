@@ -19,5 +19,14 @@ def get_camera(cam: int = 0) -> CameraService:
         camera_services[cam] = CameraService(camera_id=cam)
     return camera_services[cam]
 
-# Event to wake up the timelapse scheduler loop immediately
-timelapse_wake = asyncio.Event()
+# Ein Wake-Event je Kamera-Slot. Ein gemeinsames Event funktioniert nicht:
+# jeder Loop ruft clear() auf, bevor er wartet, und würde damit das Signal
+# für einen anderen Loop verschlucken.
+_timelapse_wakes: dict[int, asyncio.Event] = {}
+
+
+def get_timelapse_wake(cam: int = 0) -> asyncio.Event:
+    """Event, mit dem der Timelapse-Loop einer Kamera sofort aufwacht."""
+    if cam not in _timelapse_wakes:
+        _timelapse_wakes[cam] = asyncio.Event()
+    return _timelapse_wakes[cam]

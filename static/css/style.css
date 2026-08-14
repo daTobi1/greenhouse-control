@@ -1248,3 +1248,62 @@ textarea:focus-visible {
 .cam-prop-row.unsupported .cam-prop-val {
   color: var(--text3);
 }
+
+/* --- Timelapse-Zeitplan --- */
+/* Datum und Uhrzeit sind eigene Feldtypen und werden von der Regel für
+   text/number nicht erfasst – ohne das stehen sie hell im dunklen Dashboard. */
+.control-row input[type=time],
+.control-row input[type=date],
+.tl-time-field input,
+.tl-oneshot-row input {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  color-scheme: dark;
+  border-radius: 5px;
+  padding: .28rem .5rem;
+  font-family: var(--font-mono);
+  font-size: .82rem;
+  transition: border-color var(--tr-fast), box-shadow var(--tr-fast);
+}
+.control-row input[type=time] { width: 100px; }
+.control-row input[type=date] { width: 130px; }
+
+.tl-times-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+  gap: .4rem;
+  margin: .4rem 0 .6rem;
+}
+.tl-time-field {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  font-size: .75rem;
+  color: var(--text2);
+}
+.tl-time-field input {
+  flex: 1;
+  min-width: 0;
+}
+.tl-oneshots {
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+  margin: .2rem 0 .6rem;
+}
+.tl-oneshot-row {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+}
+.tl-oneshot-row input {
+  flex: 1;
+  min-width: 0;
+}
+.tl-next-due {
+  font-size: .75rem;
+  color: var(--text3);
+  margin: .2rem 0 .6rem;
+  min-height: 1em;
+}
