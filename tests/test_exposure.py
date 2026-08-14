@@ -36,6 +36,30 @@ def test_center_weighted_higher_than_edge_weighted():
     assert exposure.measure_brightness(center) > exposure.measure_brightness(edge)
 
 
+def test_measure_pure_blue_channel():
+    """Pure blue (BGR index 0). Uniform frame: center and edge weights cancel out."""
+    frame = np.zeros((48, 64, 3), dtype=np.uint8)
+    frame[:, :, 0] = 255  # Blue channel
+    expected = 255 * 0.114  # 29.07
+    assert exposure.measure_brightness(frame) == pytest.approx(expected, abs=1.0)
+
+
+def test_measure_pure_green_channel():
+    """Pure green (BGR index 1). Uniform frame: center and edge weights cancel out."""
+    frame = np.zeros((48, 64, 3), dtype=np.uint8)
+    frame[:, :, 1] = 255  # Green channel
+    expected = 255 * 0.587  # 149.685
+    assert exposure.measure_brightness(frame) == pytest.approx(expected, abs=1.0)
+
+
+def test_measure_pure_red_channel():
+    """Pure red (BGR index 2). Uniform frame: center and edge weights cancel out."""
+    frame = np.zeros((48, 64, 3), dtype=np.uint8)
+    frame[:, :, 2] = 255  # Red channel
+    expected = 255 * 0.299  # 76.245
+    assert exposure.measure_brightness(frame) == pytest.approx(expected, abs=1.0)
+
+
 # --- within_tolerance ---
 
 def test_within_tolerance_boundaries():
