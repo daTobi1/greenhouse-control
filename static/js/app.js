@@ -551,8 +551,14 @@ function buildCameraSection(ci) {
           <select id="tl-cam-idx-${ci}" onchange="loadResolutions(${ci}, this.value)">
             <option value="${ci}">Kamera ${ci}</option>
           </select>
-          <button class="btn-small" onclick="loadCamerasForSlot(${ci})" title="Kameras suchen">&#8635;</button>
+          <button class="btn-small" onclick="loadCamerasForSlot(${ci}, true)" title="Kameras suchen">&#8635;</button>
         </div>
+      </div>
+      <div class="control-row" data-tooltip="Pixelformat der Kamera. MJPG erlaubt bei USB-Kameras hohe Auflösungen; YUYV ist meist auf 640x480 begrenzt.">
+        <label>Pixelformat</label>
+        <select id="tl-fourcc-${ci}" onchange="loadResolutions(${ci}, document.getElementById('tl-cam-idx-${ci}').value)">
+          <option value="MJPG">MJPG</option>
+        </select>
       </div>
       <div class="control-row" data-tooltip="Aufnahmeauflösung.">
         <label>Auflösung</label>
@@ -639,13 +645,15 @@ async function initCameraSections() {
   // Scan cameras once, then populate all dropdowns
   await loadAllCameras();
   for (let i = 0; i < _cameraCount; i++) {
+    await loadFormats(i, document.getElementById(`tl-cam-idx-${i}`).value);
     loadResolutions(i, document.getElementById(`tl-cam-idx-${i}`).value);
   }
 }
 
-async function loadAllCameras() {
+async function loadAllCameras(refresh = false) {
   try {
-    const r = await fetch(`${API}/api/timelapse/cameras`);
+    const r = await fetch(`${API}/api/timelapse/cameras${refresh ? '?refresh=1' : ''}`);
+    if (r.status === 409) { showToast('Kamera gerade in Benutzung'); return; }
     const d = await r.json();
     _availableCameras = d.cameras || [];
   } catch(e) { _availableCameras = []; }
@@ -668,13 +676,15 @@ function populateCameraDropdown(ci) {
   }
 }
 
-async function loadCamerasForSlot(ci) {
+async function loadCamerasForSlot(ci, refresh = false) {
   const select = document.getElementById(`tl-cam-idx-${ci}`);
-  select.innerHTML = '<option value="">Suche…</option>';
+  const prev = select.value;
   select.disabled = true;
-  await loadAllCameras();
+  await loadAllCameras(refresh);
   select.disabled = false;
-  await loadResolutions(ci, select.value);
+  if ([...select.options].some(o => o.value === prev)) select.value = prev;
+  await loadFormats(ci, select.value, refresh);
+  await loadResolutions(ci, select.value, refresh);
 }
 
 function updateCaptureModeUI(ci) {
@@ -682,42 +692,68 @@ function updateCaptureModeUI(ci) {
   document.getElementById(`clip-options-${ci}`).classList.toggle('hidden', mode !== 'clip');
 }
 
-async function loadResolutions(ci, devIdx) {
+async function loadFormats(ci, devIdx, refresh = false) {
+  const sel = document.getElementById(`tl-fourcc-${ci}`);
+  if (!sel) return;
+  const prev = sel.value;
+  try {
+    const r = await fetch(`${API}/api/timelapse/formats?camera=${devIdx}${refresh ? '&refresh=1' : ''}`);
+    if (r.status === 409) { showToast('Kamera gerade in Benutzung'); return; }
+    const d = await r.json();
+    const list = (d.formats && d.formats.length) ? d.formats : ['MJPG'];
+    sel.innerHTML = list.map(f => `<option value="${escHtml(f)}">${escHtml(f)}</option>`).join('');
+    if (list.includes(prev)) sel.value = prev;
+  } catch(e) {}
+}
+
+async function loadResolutions(ci, devIdx, refresh = false) {
   const sel = document.getElementById(`tl-resolution-${ci}`);
-  sel.innerHTML = '<option value="0x0">Kamera Standard</option>';
+  const prev = sel.value;
   sel.disabled = true;
   try {
-    const r = await fetch(`${API}/api/timelapse/resolutions?camera=${devIdx}`);
+    const r = await fetch(`${API}/api/timelapse/resolutions?camera=${devIdx}${refresh ? '&refresh=1' : ''}`);
+    if (r.status === 409) {
+      showToast('Kamera gerade in Benutzung – Auflösungen unverändert');
+      sel.disabled = false;
+      return;
+    }
     const d = await r.json();
+    sel.innerHTML = '<option value="0x0">Kamera Standard</option>';
     (d.resolutions || []).forEach(res => {
       const opt = document.createElement('option');
       opt.value = `${res.width}x${res.height}`;
       opt.textContent = res.label;
       sel.appendChild(opt);
     });
-    // Restore saved resolution
+
     const sr = await fetch(`${API}/api/settings`);
     const s  = await sr.json();
     const wKey = ci === 0 ? (s.cam_0_capture_width ?? s.camera_capture_width ?? 0) : (s[`cam_${ci}_capture_width`] ?? 0);
     const hKey = ci === 0 ? (s.cam_0_capture_height ?? s.camera_capture_height ?? 0) : (s[`cam_${ci}_capture_height`] ?? 0);
     const saved = `${wKey}x${hKey}`;
-    if ([...sel.options].some(o => o.value === saved)) sel.value = saved;
+    if ([...sel.options].some(o => o.value === saved))      sel.value = saved;
+    else if ([...sel.options].some(o => o.value === prev))   sel.value = prev;
   } catch(e) {}
   sel.disabled = false;
-  await loadFps(ci, devIdx, sel.value);
+  await loadFps(ci, devIdx, sel.value, refresh);
 }
 
-async function loadFps(ci, devIdx, resolution) {
+async function loadFps(ci, devIdx, resolution, refresh = false) {
   const sel   = document.getElementById(`tl-clip-fps-${ci}`);
   const saved = sel.value;
-  sel.innerHTML = '';
   sel.disabled  = true;
   const [w, h] = (resolution || '0x0').split('x').map(Number);
   const fallback = [5, 10, 15, 20, 25, 30];
   try {
-    const r = await fetch(`${API}/api/timelapse/fps?camera=${devIdx}&width=${w}&height=${h}`);
+    const r = await fetch(`${API}/api/timelapse/fps?camera=${devIdx}&width=${w}&height=${h}${refresh ? '&refresh=1' : ''}`);
+    if (r.status === 409) {
+      showToast('Kamera gerade in Benutzung – Bildraten unverändert');
+      sel.disabled = false;
+      return;
+    }
     const d = await r.json();
     const list = d.fps && d.fps.length ? d.fps : fallback;
+    sel.innerHTML = '';
     list.forEach(fps => {
       const opt = document.createElement('option');
       opt.value = fps;
@@ -725,6 +761,7 @@ async function loadFps(ci, devIdx, resolution) {
       sel.appendChild(opt);
     });
   } catch(e) {
+    sel.innerHTML = '';
     fallback.forEach(fps => {
       const opt = document.createElement('option');
       opt.value = fps;
@@ -771,6 +808,8 @@ async function fetchTimelapse(ci) {
     updateCaptureModeUI(ci);
     const camSel = document.getElementById(`tl-cam-idx-${ci}`);
     camSel.value = String(d.camera_index ?? ci);
+    const fcSel = document.getElementById(`tl-fourcc-${ci}`);
+    if (d.fourcc && [...fcSel.options].some(o => o.value === d.fourcc)) fcSel.value = d.fourcc;
 
     const tb = document.getElementById(`cam-target-brightness-${ci}`);
     tb.value = d.target_brightness ?? 120;
@@ -851,6 +890,7 @@ async function startTimelapse(ci) {
       [`cam_${ci}_capture_mode`]: captureMode,
       [`cam_${ci}_clip_duration`]: clipDuration,
       [`cam_${ci}_clip_fps`]: clipFps,
+      [`cam_${ci}_fourcc`]: document.getElementById(`tl-fourcc-${ci}`).value,
     })
   });
 
@@ -1676,6 +1716,7 @@ async function loadSettingsModal() {
     const shareOn = s.timelapse_share_enabled ?? false;
     document.getElementById('timelapse-share').checked = shareOn;
     updateShareUrl(shareOn);
+    document.getElementById('timelapse-deflicker').checked = s.timelapse_deflicker ?? true;
     document.getElementById('tooltip-delay').value = localStorage.getItem('tooltip_delay_ms') ?? '600';
   } catch(e) {}
 }
@@ -1788,6 +1829,7 @@ async function saveSettings() {
     timelapse_path:         document.getElementById('timelapse-path').value.trim() || 'timelapse',
     timelapse_share_enabled: document.getElementById('timelapse-share').checked,
     camera_count: Math.max(1, Math.min(4, parseInt(document.getElementById('camera-count').value) || 1)),
+    timelapse_deflicker: document.getElementById('timelapse-deflicker').checked,
   };
   // Tooltip delay is client-side only
   localStorage.setItem('tooltip_delay_ms', document.getElementById('tooltip-delay').value || '600');
