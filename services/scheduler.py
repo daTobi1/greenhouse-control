@@ -116,9 +116,10 @@ class Scheduler:
                     inside  = self._sb.get_sensor_data("inside")
                     outside = self._sb.get_sensor_data("outside")
                     if inside:
-                        speed = self._fan.calculate_speed(inside, outside, settings)
+                        decision = self._fan.calculate_speed(inside, outside, settings)
+                        speed = decision.speed
                         self._fan.set_speed(speed)
-                        reason = "auto"
+                        reason = decision.reason
                     else:
                         speed = None
                         reason = None

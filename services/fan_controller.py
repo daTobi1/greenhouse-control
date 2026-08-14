@@ -5,7 +5,10 @@ Fan orientation: EXHAUST – the fan pushes stale air OUT of the greenhouse.
 Fresh outside air enters passively through vents/gaps. This means ventilating
 only makes sense when outside conditions are actually better than inside:
   - Temperature:  outside must be cooler than inside
-  - Humidity:     outside must be drier than inside
+  - Humidity:     outside air must contain less water in absolute terms
+                  (g/m³, Magnus). Comparing relative humidity is wrong:
+                  cold saturated air holds far less water than warm air at
+                  70 % RH and dries the greenhouse once it warms up.
 
 Proportional control algorithm:
   - Computes a 0..1 speed from the temperature/humidity error vs. target.
@@ -15,6 +18,9 @@ Proportional control algorithm:
 """
 
 import logging
+from dataclasses import dataclass
+
+from services import psychrometrics
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +30,19 @@ try:
 except ImportError:
     GPIO_AVAILABLE = False
     logger.warning("RPi.GPIO not available – running in mock mode")
+
+
+@dataclass(frozen=True)
+class FanDecision:
+    """Ergebnis der Regelentscheidung.
+
+    Die Begründung wird bis ins Dashboard durchgereicht, damit sichtbar ist,
+    warum der Lüfter steht – ein stiller Stillstand war bisher nicht von einem
+    Defekt zu unterscheiden.
+    """
+
+    speed: float
+    reason: str
 
 
 class FanController:
@@ -88,73 +107,73 @@ class FanController:
 
     def calculate_speed(
         self,
-        inside: dict,
+        inside: dict | None,
         outside: dict | None,
         settings: dict,
-    ) -> float:
-        """
-        Calculate the desired fan speed (0.0 … 1.0) based on sensor data.
-
-        Parameters
-        ----------
-        inside   : dict with keys temperature, humidity
-        outside  : dict with keys temperature, humidity  (may be None)
-        settings : settings dict from the database
-        """
-        target_temp      = settings.get("target_temperature", 25.0)
-        target_humidity  = settings.get("target_humidity", 65.0)
-        temp_range       = settings.get("temp_control_range", 5.0)
-        humidity_range   = settings.get("humidity_control_range", 20.0)
-        fan_min          = settings.get("fan_min_speed", 0.2)
-        fan_max          = settings.get("fan_max_speed", 1.0)
-        deadband         = settings.get("fan_deadband", 0.1)
-        mode             = settings.get("control_mode", "combined")
-        min_temp         = settings.get("fan_min_temperature", 5.0)
+    ) -> FanDecision:
+        """Gewünschte Lüfterdrehzahl und Begründung ermitteln."""
+        target_temp     = settings.get("target_temperature", 25.0)
+        target_humidity = settings.get("target_humidity", 65.0)
+        temp_range      = settings.get("temp_control_range", 5.0)
+        humidity_range  = settings.get("humidity_control_range", 20.0)
+        fan_min         = settings.get("fan_min_speed", 0.2)
+        fan_max         = settings.get("fan_max_speed", 1.0)
+        deadband        = settings.get("fan_deadband", 0.1)
+        mode            = settings.get("control_mode", "combined_or")
+        min_temp        = settings.get("fan_min_temperature", 5.0)
+        abs_margin      = settings.get("humidity_abs_margin", 0.5)
+        temp_guard      = settings.get("humidity_temp_guard", 3.0)
 
         if not inside:
-            return 0.0
+            self._is_active = False
+            return FanDecision(0.0, "no_inside_data")
 
         i_temp = inside.get("temperature", 0.0)
+        i_hum  = inside.get("humidity", 0.0)
 
-        # Frost protection: stop fan if inside temperature is too low
         if i_temp < min_temp:
             self._is_active = False
-            return 0.0
-        i_hum  = inside.get("humidity", 0.0)
-        o_temp = outside.get("temperature", 9999.0) if outside else 9999.0
-        o_hum  = outside.get("humidity", 9999.0)   if outside else 9999.0
+            return FanDecision(0.0, "frost")
+
+        if not outside:
+            self._is_active = False
+            return FanDecision(0.0, "no_outside_data")
+
+        o_temp = outside.get("temperature", 0.0)
+        o_hum  = outside.get("humidity", 0.0)
 
         speed_temp = 0.0
         speed_hum  = 0.0
 
         if mode in ("temperature", "combined_or", "combined_and"):
             err = i_temp - target_temp
-            # Exhaust fan cools only if outside is cooler than inside
+            # Abluftlüfter kühlt nur, wenn die Außenluft kälter ist.
             if err > 0 and o_temp < i_temp:
                 speed_temp = min(1.0, err / temp_range)
 
         if mode in ("humidity", "combined_or", "combined_and"):
             err = i_hum - target_humidity
-            # Exhaust fan reduces humidity only if outside is drier than inside
-            if err > 0 and o_hum < i_hum:
+            # Entfeuchten kühlt zwangsläufig mit. Unterhalb des Schutzabstands
+            # zum Temperatur-Sollwert wird deshalb nicht mehr entfeuchtet.
+            warm_enough = i_temp > target_temp - temp_guard
+            drier_outside = (
+                psychrometrics.abs_humidity(o_temp, o_hum)
+                < psychrometrics.abs_humidity(i_temp, i_hum) - abs_margin
+            )
+            if err > 0 and warm_enough and drier_outside:
                 speed_hum = min(1.0, err / humidity_range)
 
         if mode == "combined_and":
-            # Both conditions must be active; use the lower of the two
             raw = min(speed_temp, speed_hum)
         else:
-            # OR: run if either condition is exceeded
             raw = max(speed_temp, speed_hum)
 
         if raw <= 0:
             self._is_active = False
-            return 0.0
+            return FanDecision(0.0, "idle")
 
-        # Hysteresis: only start if raw exceeds deadband; once running, keep
-        # running until raw drops to 0 (handled above).
         if not self._is_active and raw <= deadband:
-            return 0.0
+            return FanDecision(0.0, "idle")
 
         self._is_active = True
-        # Scale into [fan_min, fan_max]
-        return fan_min + raw * (fan_max - fan_min)
+        return FanDecision(fan_min + raw * (fan_max - fan_min), "auto")
