@@ -5,11 +5,20 @@ and sensor logging as independent asyncio tasks.
 
 import asyncio
 import logging
+from datetime import datetime, timedelta
 
 import state as _state
 from services.camera import camera_setup_kwargs
+from services import schedule
 
 logger = logging.getLogger(__name__)
+
+# Längster Schlaf am Stück. Begrenzt, damit Einstellungsänderungen auch bei
+# stundenlangen Intervallen zeitnah greifen.
+SETTINGS_POLL_SECONDS = 60.0
+
+# Pause, wenn nichts zu tun ist (Aufnahme inaktiv oder kein Zeitpunkt planbar).
+IDLE_POLL_SECONDS = 30.0
 
 
 class Scheduler:
@@ -141,7 +150,6 @@ class Scheduler:
                 # Start loops for new cameras
                 for i in range(camera_count):
                     if i not in self._tl_tasks or self._tl_tasks[i].done():
-                        cam = _state.get_camera(i)
                         self._tl_tasks[i] = asyncio.create_task(
                             self._timelapse_loop(i), name=f"timelapse_cam{i}"
                         )
@@ -162,28 +170,58 @@ class Scheduler:
                 logger.error(f"Timelapse manager error: {exc}")
                 await asyncio.sleep(10)
 
+    async def _sleep_until(self, wake: asyncio.Event, target: datetime) -> bool:
+        """Bis `target` schlafen. True, wenn das Wake-Event ausgelöst hat.
+
+        Wird in Häppchen geschlafen, damit Einstellungsänderungen greifen und
+        ein Sprung der Systemuhr nicht zu einem stundenlangen Schlaf führt.
+        """
+        while self._running:
+            if wake.is_set():
+                wake.clear()
+                return True
+            remaining = (target - datetime.now()).total_seconds()
+            if remaining <= 0:
+                return False
+            try:
+                await asyncio.wait_for(
+                    wake.wait(), timeout=min(remaining, SETTINGS_POLL_SECONDS)
+                )
+            except asyncio.TimeoutError:
+                continue
+            wake.clear()
+            return True
+        return False
+
+    async def _sleep_for(self, wake: asyncio.Event, seconds: float) -> bool:
+        return await self._sleep_until(
+            wake, datetime.now() + timedelta(seconds=seconds)
+        )
+
     async def _timelapse_loop(self, cam_idx: int):
-        """Timelapse capture loop for a single camera slot."""
+        """Timelapse-Aufnahme einer Kamera nach ihrem Zeitplan."""
         last_cam_config = None
+        last_capture: datetime | None = None
+        wake = _state.get_timelapse_wake(cam_idx)
+
         while self._running:
             try:
-                settings     = await self._db.get_all_settings()
-                tl_path      = settings.get("timelapse_path") or "timelapse"
-                cam          = _state.get_camera(cam_idx)
+                settings = await self._db.get_all_settings()
+                tl_path  = settings.get("timelapse_path") or "timelapse"
+                cam      = _state.get_camera(cam_idx)
 
-                # Per-camera settings with fallback to legacy keys for cam 0
-                if cam_idx == 0:
-                    active       = settings.get("cam_0_timelapse_active", settings.get("timelapse_active", False))
-                    interval     = float(settings.get("cam_0_timelapse_interval", settings.get("timelapse_interval", 300)))
-                    capture_mode = settings.get("cam_0_capture_mode", settings.get("capture_mode", "still"))
-                    clip_duration= float(settings.get("cam_0_clip_duration", settings.get("clip_duration", 5)))
-                    clip_fps     = int(settings.get("cam_0_clip_fps", settings.get("clip_fps", 10)))
-                else:
-                    active       = settings.get(f"cam_{cam_idx}_timelapse_active", False)
-                    interval     = float(settings.get(f"cam_{cam_idx}_timelapse_interval", 300))
-                    capture_mode = settings.get(f"cam_{cam_idx}_capture_mode", "still")
-                    clip_duration= float(settings.get(f"cam_{cam_idx}_clip_duration", 5))
-                    clip_fps     = int(settings.get(f"cam_{cam_idx}_clip_fps", 10))
+                def cam_get(name, default, legacy=None):
+                    key = f"cam_{cam_idx}_{name}"
+                    if settings.get(key) is not None:
+                        return settings[key]
+                    if cam_idx == 0 and legacy is not None and settings.get(legacy) is not None:
+                        return settings[legacy]
+                    return default
+
+                active        = cam_get("timelapse_active", False, "timelapse_active")
+                capture_mode  = cam_get("capture_mode", "still", "capture_mode")
+                clip_duration = float(cam_get("clip_duration", 5, "clip_duration"))
+                clip_fps      = int(cam_get("clip_fps", 10, "clip_fps"))
 
                 # Setup nur bei Konfigurationsänderung
                 kwargs = camera_setup_kwargs(settings, cam_idx, tl_path)
@@ -191,26 +229,39 @@ class Scheduler:
                     cam.setup(**kwargs)
                     last_cam_config = kwargs
 
-                if active:
-                    if not cam.is_capturing:
-                        cam.start_session()
+                if not active:
+                    if cam.is_capturing:
+                        cam.stop_session()
+                    last_capture = None
+                    await self._sleep_for(wake, IDLE_POLL_SECONDS)
+                    continue
+
+                if not cam.is_capturing:
+                    cam.start_session()
+
+                cfg = schedule.parse_config(settings, cam_idx)
+                target = schedule.next_due(datetime.now(), cfg, last_capture)
+                if target is None:
+                    logger.debug(f"cam{cam_idx}: kein Aufnahmezeitpunkt planbar")
+                    await self._sleep_for(wake, IDLE_POLL_SECONDS)
+                    continue
+
+                if await self._sleep_until(wake, target):
+                    continue  # Einstellungen geändert – Zeitpunkt neu berechnen
+
+                now = datetime.now()
+                if schedule.is_due(now, target, cfg.grace_seconds):
                     if capture_mode == "clip":
-                        await asyncio.to_thread(
-                            cam.capture_clip, clip_duration, clip_fps
-                        )
+                        await asyncio.to_thread(cam.capture_clip, clip_duration, clip_fps)
                     else:
                         await asyncio.to_thread(cam.capture_frame)
                 else:
-                    if cam.is_capturing:
-                        cam.stop_session()
-
-                # Wait for interval OR wake event (whichever comes first)
-                wake = _state.get_timelapse_wake(cam_idx)
-                wake.clear()
-                try:
-                    await asyncio.wait_for(wake.wait(), timeout=interval)
-                except asyncio.TimeoutError:
-                    pass
+                    logger.info(
+                        f"cam{cam_idx}: Aufnahme {target:%Y-%m-%d %H:%M} verfallen "
+                        f"(Kulanzfenster {cfg.grace_seconds:.0f}s überschritten)"
+                    )
+                # In beiden Fällen: Rhythmus ab jetzt fortsetzen, nicht nachholen.
+                last_capture = now
 
             except asyncio.CancelledError:
                 break
