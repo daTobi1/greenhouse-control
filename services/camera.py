@@ -35,15 +35,28 @@ COMMON_RESOLUTIONS = [
 ]
 
 # OpenCV property IDs (numeric for compatibility across builds)
-_PROP_CONTRAST      = 11
-_PROP_ZOOM          = 27
-_PROP_FOCUS         = 28
-_PROP_AUTOFOCUS     = 39
-_PROP_AUTO_WB       = 44
+_PROP_BRIGHTNESS     = 10
+_PROP_CONTRAST       = 11
+_PROP_GAIN           = 14
+_PROP_EXPOSURE       = 15
+_PROP_AUTO_EXPOSURE  = 21
+_PROP_GAMMA          = 22
+_PROP_ZOOM           = 27
+_PROP_FOCUS          = 28
+_PROP_AUTOFOCUS      = 39
+_PROP_AUTO_WB        = 44
 _PROP_WB_TEMPERATURE = 45
 
+# V4L2: 1 = manuell, 3 = Blendenpriorität (automatisch).
+_V4L2_EXPOSURE_MANUAL = 1.0
+
 CAMERA_PROPERTIES = [
-    {"key": "auto_wb",       "prop": _PROP_AUTO_WB,       "label": "Auto-Weissabgleich", "type": "bool"},
+    {"key": "auto_exposure", "prop": _PROP_AUTO_EXPOSURE,  "label": "Auto-Belichtung",    "type": "bool"},
+    {"key": "exposure",      "prop": _PROP_EXPOSURE,       "label": "Belichtung",         "type": "range", "min": 1,    "max": 5000,  "step": 1,   "auto_key": "auto_exposure"},
+    {"key": "gain",          "prop": _PROP_GAIN,           "label": "Verstärkung",        "type": "range", "min": 0,    "max": 255,   "step": 1},
+    {"key": "brightness",    "prop": _PROP_BRIGHTNESS,     "label": "Helligkeit",         "type": "range", "min": 0,    "max": 255,   "step": 1},
+    {"key": "gamma",         "prop": _PROP_GAMMA,          "label": "Gamma",              "type": "range", "min": 1,    "max": 500,   "step": 1},
+    {"key": "auto_wb",       "prop": _PROP_AUTO_WB,        "label": "Auto-Weissabgleich", "type": "bool"},
     {"key": "white_balance", "prop": _PROP_WB_TEMPERATURE, "label": "Weissabgleich",      "type": "range", "min": 2000, "max": 10000, "step": 100, "unit": "K", "auto_key": "auto_wb"},
     {"key": "contrast",      "prop": _PROP_CONTRAST,       "label": "Kontrast",           "type": "range", "min": 0,    "max": 255,   "step": 1},
     {"key": "autofocus",     "prop": _PROP_AUTOFOCUS,      "label": "Auto-Fokus",         "type": "bool"},
@@ -105,16 +118,18 @@ class CameraService:
         if not self._cam_props:
             return
         # Auto toggles first
-        for pid in (_PROP_AUTO_WB, _PROP_AUTOFOCUS):
+        for pid in (_PROP_AUTO_WB, _PROP_AUTOFOCUS, _PROP_AUTO_EXPOSURE):
             if pid in self._cam_props:
                 cap.set(pid, self._cam_props[pid])
         # Manual values (skip if corresponding auto is on)
         for pid, val in self._cam_props.items():
-            if pid in (_PROP_AUTO_WB, _PROP_AUTOFOCUS):
+            if pid in (_PROP_AUTO_WB, _PROP_AUTOFOCUS, _PROP_AUTO_EXPOSURE):
                 continue
             if pid == _PROP_WB_TEMPERATURE and self._cam_props.get(_PROP_AUTO_WB, 0) > 0.5:
                 continue
             if pid == _PROP_FOCUS and self._cam_props.get(_PROP_AUTOFOCUS, 0) > 0.5:
+                continue
+            if pid == _PROP_EXPOSURE and self._cam_props.get(_PROP_AUTO_EXPOSURE, 0) > 1.5:
                 continue
             cap.set(pid, val)
         # Discard initial frames so settings take effect on the hardware
