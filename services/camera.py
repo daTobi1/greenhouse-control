@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
-from services import device_lock
+from services import device_lock, v4l2
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +89,36 @@ CAMERA_PROPERTIES = [
     {"key": "focus",         "prop": _PROP_FOCUS,          "label": "Fokus",              "type": "range", "min": 0,    "max": 255,   "step": 1,   "auto_key": "autofocus"},
     {"key": "zoom",          "prop": _PROP_ZOOM,           "label": "Zoom",               "type": "range", "min": 100,  "max": 800,   "step": 10},
 ]
+
+_RESOLUTION_LABELS = {(w, h): label for w, h, label in COMMON_RESOLUTIONS if label}
+
+_detect_cache: dict[tuple, object] = {}
+
+
+def clear_detect_cache() -> None:
+    """Erkennungs-Cache leeren – nach Kamerawechsel im laufenden Betrieb."""
+    _detect_cache.clear()
+
+
+def _cached(key: tuple, producer, refresh: bool = False):
+    if refresh:
+        _detect_cache.pop(key, None)
+    if key not in _detect_cache:
+        _detect_cache[key] = producer()
+    return _detect_cache[key]
+
+
+def _resolution_label(width: int, height: int) -> str:
+    known = _RESOLUTION_LABELS.get((width, height))
+    return f"{width}×{height}" + (f" ({known})" if known else "")
+
+
+def _formats_for(camera_index: int, refresh: bool = False) -> list[dict]:
+    return _cached(
+        ("formats", camera_index),
+        lambda: v4l2.list_formats(f"/dev/video{camera_index}"),
+        refresh,
+    )
 
 
 class CameraService:
@@ -565,61 +595,159 @@ class CameraService:
             )
         return sorted(sessions, key=lambda x: x["name"], reverse=True)
 
-    def detect_cameras(self) -> list[dict]:
-        """Scan video device indices 0-9 and return those that can deliver a frame."""
+    def detect_cameras(self, refresh: bool = False) -> list[dict]:
+        """Verfügbare Kameras. Primär aus sysfs, sonst OpenCV-Probing.
+
+        sysfs ist nicht nur schneller, sondern liefert auch echte Gerätenamen
+        und blendet Metadata-Nodes aus, die beim Öffnen scheitern würden.
+        """
+        def _produce():
+            if v4l2.available():
+                devices = v4l2.list_devices()
+                if devices:
+                    return [{"index": d["index"], "name": d["name"]} for d in devices]
+            return self._detect_cameras_opencv()
+
+        return _cached(("cameras",), _produce, refresh)
+
+    def _detect_cameras_opencv(self) -> list[dict]:
         if not CV2_AVAILABLE:
             return []
         cameras = []
         for i in range(10):
-            cap = cv2.VideoCapture(i)
-            if cap.isOpened():
-                ret, _ = cap.read()
-                cap.release()
-                if ret:
-                    cameras.append({"index": i, "name": f"Kamera {i}"})
+            lock = device_lock.get(i)
+            if not lock.acquire(timeout=0.2):
+                continue  # belegt – vermutlich läuft dort eine Aufnahme
+            try:
+                cap = cv2.VideoCapture(i)
+                if cap.isOpened():
+                    ret, _ = cap.read()
+                    cap.release()
+                    if ret:
+                        cameras.append({"index": i, "name": f"Kamera {i}"})
+            finally:
+                lock.release()
         return cameras
 
-    def detect_resolutions(self, camera_index: int) -> list[dict]:
-        """Return resolutions that the camera actually supports."""
-        if not CV2_AVAILABLE:
-            return []
-        cap = cv2.VideoCapture(camera_index)
-        if not cap.isOpened():
-            return []
-        supported = []
-        seen: set[tuple] = set()
-        for w, h, label in COMMON_RESOLUTIONS:
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH,  w)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
-            aw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            ah = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            if (aw, ah) == (w, h) and (aw, ah) not in seen:
-                seen.add((aw, ah))
-                name = f"{w}×{h}" + (f" ({label})" if label else "")
-                supported.append({"width": w, "height": h, "label": name})
-        cap.release()
-        return supported
+    def detect_resolutions(self, camera_index: int, refresh: bool = False) -> list[dict]:
+        """Vom Treiber gemeldete Auflösungen, absteigend nach Pixelzahl."""
+        formats = _formats_for(camera_index, refresh)
+        if formats:
+            seen: set[tuple] = set()
+            result = []
+            for f in formats:
+                key = (f["width"], f["height"])
+                if key in seen:
+                    continue
+                seen.add(key)
+                result.append(
+                    {
+                        "width": f["width"],
+                        "height": f["height"],
+                        "label": _resolution_label(f["width"], f["height"]),
+                    }
+                )
+            result.sort(key=lambda r: r["width"] * r["height"], reverse=True)
+            return result
 
-    def detect_fps(self, camera_index: int, width: int = 0, height: int = 0) -> list[int]:
-        """Return FPS values the camera supports at the given resolution."""
+        return _cached(
+            ("res_cv", camera_index),
+            lambda: self._detect_resolutions_opencv(camera_index),
+            refresh,
+        )
+
+    def detect_formats(self, camera_index: int, refresh: bool = False) -> list[str]:
+        """Pixelformate des Treibers, z. B. ["MJPG", "YUYV"]."""
+        formats = _formats_for(camera_index, refresh)
+        seen: list[str] = []
+        for f in formats:
+            if f["fourcc"] not in seen:
+                seen.append(f["fourcc"])
+        return seen
+
+    def detect_fps(
+        self, camera_index: int, width: int = 0, height: int = 0, refresh: bool = False
+    ) -> list[int]:
+        """Bildraten, die der Treiber für diese Auflösung meldet.
+
+        Ohne Auflösung wird die Vereinigung über alle Formate gebildet.
+        """
+        formats = _formats_for(camera_index, refresh)
+        if formats:
+            values: set[int] = set()
+            for f in formats:
+                if width > 0 and height > 0 and (f["width"], f["height"]) != (width, height):
+                    continue
+                values.update(int(round(v)) for v in f["fps"])
+            if values:
+                return sorted(values)
+
+        return _cached(
+            ("fps_cv", camera_index, width, height),
+            lambda: self._detect_fps_opencv(camera_index, width, height),
+            refresh,
+        )
+
+    def _detect_resolutions_opencv(self, camera_index: int) -> list[dict]:
+        """Fallback für Systeme ohne v4l2-ctl (Windows-Entwicklungsmaschine).
+
+        Zwingend: FOURCC vor Breite vor Höhe, und Prüfung gegen ein wirklich
+        gelesenes Frame. cap.get() gibt bei vielen Treibern nur den gesetzten
+        Wunschwert zurück und erzeugt so falsch positive Treffer.
+        """
         if not CV2_AVAILABLE:
             return []
-        cap = cv2.VideoCapture(camera_index)
-        if not cap.isOpened():
+        lock = device_lock.get(camera_index)
+        if not lock.acquire(timeout=LOCK_TIMEOUT):
             return []
-        if width > 0 and height > 0:
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH,  width)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-        supported = []
-        seen: set[int] = set()
-        for fps in COMMON_FPS:
-            cap.set(cv2.CAP_PROP_FPS, fps)
-            actual = round(cap.get(cv2.CAP_PROP_FPS))
-            if actual == fps and actual not in seen:
-                seen.add(actual)
-                supported.append(actual)
-        cap.release()
-        return sorted(supported)
+        try:
+            cap = cv2.VideoCapture(camera_index)
+            if not cap.isOpened():
+                return []
+            supported = []
+            seen: set[tuple] = set()
+            for w, h, label in COMMON_RESOLUTIONS:
+                cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*DEFAULT_FOURCC))
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+                ok, frame = cap.read()
+                if not ok or frame is None:
+                    continue
+                ah, aw = frame.shape[:2]
+                if (aw, ah) == (w, h) and (aw, ah) not in seen:
+                    seen.add((aw, ah))
+                    supported.append(
+                        {"width": w, "height": h, "label": _resolution_label(w, h)}
+                    )
+            cap.release()
+            supported.sort(key=lambda r: r["width"] * r["height"], reverse=True)
+            return supported
+        finally:
+            lock.release()
+
+    def _detect_fps_opencv(self, camera_index: int, width: int, height: int) -> list[int]:
+        if not CV2_AVAILABLE:
+            return []
+        lock = device_lock.get(camera_index)
+        if not lock.acquire(timeout=LOCK_TIMEOUT):
+            return []
+        try:
+            cap = cv2.VideoCapture(camera_index)
+            if not cap.isOpened():
+                return []
+            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*DEFAULT_FOURCC))
+            if width > 0 and height > 0:
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+            supported: list[int] = []
+            for fps in COMMON_FPS:
+                cap.set(cv2.CAP_PROP_FPS, fps)
+                if round(cap.get(cv2.CAP_PROP_FPS)) == fps and fps not in supported:
+                    supported.append(fps)
+            cap.release()
+            return sorted(supported)
+        finally:
+            lock.release()
 
     def delete_session(self, session: str) -> bool:
         session_dir = self._frames_dir / session
