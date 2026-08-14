@@ -190,8 +190,37 @@ class SwitchBotService:
         await scanner.stop()
         return found
 
-    def get_sensor_data(self, role: str) -> dict | None:
-        return self._sensor_data.get(role)
+    def data_age(self, role: str, now: datetime | None = None) -> float | None:
+        """Alter des letzten Messwerts in Sekunden, oder None wenn unbekannt."""
+        data = self._sensor_data.get(role)
+        if not data:
+            return None
+        try:
+            stamp = datetime.fromisoformat(data["timestamp"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        return ((now or datetime.now()) - stamp).total_seconds()
+
+    def get_sensor_data(
+        self,
+        role: str,
+        max_age_s: float | None = None,
+        now: datetime | None = None,
+    ) -> dict | None:
+        """Letzter Messwert einer Rolle.
+
+        Mit max_age_s wird None geliefert, sobald der Wert älter ist – sonst
+        würde die Regelung bei ausgefallenem Sensor unbegrenzt auf einem
+        eingefrorenen Messwert weiterlaufen. Ohne den Parameter bleibt das
+        Verhalten unverändert.
+        """
+        data = self._sensor_data.get(role)
+        if data is None or max_age_s is None:
+            return data
+        age = self.data_age(role, now)
+        if age is None or age > max_age_s:
+            return None
+        return data
 
     def get_all_data(self) -> dict:
         return dict(self._sensor_data)
