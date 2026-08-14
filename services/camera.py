@@ -560,12 +560,21 @@ class CameraService:
             with self._open_capture() as cap:
                 self._apply_props(cap)
 
-                w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                # Maße aus einem echten Frame, nicht aus cap.get(): der Treiber
+                # meldet dort den Wunschwert, auch wenn er auf etwas anderes
+                # gesnapped hat. Ein falsch dimensionierter VideoWriter
+                # verwirft jeden write() stumm und die Datei bleibt leer.
+                ok, first = cap.read()
+                if not ok or first is None:
+                    logger.error("capture_clip: Kein Frame von der Kamera")
+                    clip_path.unlink(missing_ok=True)
+                    return None
+                h, w = first.shape[:2]
                 fourcc = cv2.VideoWriter_fourcc(*"mp4v")
                 out = cv2.VideoWriter(str(clip_path), fourcc, float(clip_fps), (w, h))
 
                 try:
+                    out.write(first)
                     frame_interval = 1.0 / clip_fps
                     end_time = time.monotonic() + duration
                     next_frame = time.monotonic()
