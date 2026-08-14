@@ -33,10 +33,6 @@ LOCK_TIMEOUT = 2.0
 # ohne echte Helligkeitsverläufe über den Tag flachzubügeln.
 DEFLICKER_WINDOW = 7
 
-# Reiner Marker: dokumentiert, dass FOURCC vor Breite/Höhe gesetzt werden muss.
-# Wird von tests/test_camera_open.py importiert.
-_PROP_FOURCC_ORDER_MARKER = "fourcc-before-size"
-
 
 class CameraBusy(RuntimeError):
     """Die Kamera ist gerade von einem anderen Zugriff belegt."""
