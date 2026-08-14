@@ -18,6 +18,7 @@ Proportional control algorithm:
 """
 
 import logging
+import time
 from dataclasses import dataclass
 
 from services import psychrometrics
@@ -53,6 +54,7 @@ class FanController:
         self._current_speed: float = 0.0
         self._mock = not GPIO_AVAILABLE
         self._is_active: bool = False  # hysteresis state
+        self._last_change: float | None = None   # time.monotonic() des letzten Zustandswechsels
 
     # ------------------------------------------------------------------
     # Setup / teardown
@@ -110,34 +112,42 @@ class FanController:
         inside: dict | None,
         outside: dict | None,
         settings: dict,
+        now: float | None = None,
     ) -> FanDecision:
-        """Gewünschte Lüfterdrehzahl und Begründung ermitteln."""
+        """Gewünschte Lüfterdrehzahl und Begründung ermitteln.
+
+        `now` ist eine monotone Zeit in Sekunden und wird nur für
+        Mindestlaufzeit und Mindestpause gebraucht. Als Parameter, damit die
+        Zeitlogik ohne Warten testbar ist.
+        """
+        now = time.monotonic() if now is None else now
+
         target_temp     = settings.get("target_temperature", 25.0)
         target_humidity = settings.get("target_humidity", 65.0)
         temp_range      = settings.get("temp_control_range", 5.0)
         humidity_range  = settings.get("humidity_control_range", 20.0)
         fan_min         = settings.get("fan_min_speed", 0.2)
         fan_max         = settings.get("fan_max_speed", 1.0)
-        deadband        = settings.get("fan_deadband", 0.1)
         mode            = settings.get("control_mode", "combined_or")
         min_temp        = settings.get("fan_min_temperature", 5.0)
         abs_margin      = settings.get("humidity_abs_margin", 0.5)
         temp_guard      = settings.get("humidity_temp_guard", 3.0)
+        start_threshold = settings.get("fan_start_threshold", 0.10)
+        stop_threshold  = settings.get("fan_stop_threshold", 0.03)
+        min_runtime     = settings.get("fan_min_runtime", 120.0)
+        min_pause       = settings.get("fan_min_pause", 60.0)
 
         if not inside:
-            self._is_active = False
-            return FanDecision(0.0, "no_inside_data")
+            return self._force_off("no_inside_data", now)
 
         i_temp = inside.get("temperature", 0.0)
         i_hum  = inside.get("humidity", 0.0)
 
         if i_temp < min_temp:
-            self._is_active = False
-            return FanDecision(0.0, "frost")
+            return self._force_off("frost", now)
 
         if not outside:
-            self._is_active = False
-            return FanDecision(0.0, "no_outside_data")
+            return self._force_off("no_outside_data", now)
 
         o_temp = outside.get("temperature", 0.0)
         o_hum  = outside.get("humidity", 0.0)
@@ -168,12 +178,32 @@ class FanController:
         else:
             raw = max(speed_temp, speed_hum)
 
-        if raw <= 0:
-            self._is_active = False
-            return FanDecision(0.0, "idle")
+        # Zwei getrennte Schwellen: einschalten erst deutlich über dem
+        # Sollwert, ausschalten erst deutlich darunter. Eine einzelne Schwelle
+        # lässt den Lüfter am Sollwert im Minutentakt takten.
+        should_run = raw > stop_threshold if self._is_active else raw >= start_threshold
 
-        if not self._is_active and raw <= deadband:
-            return FanDecision(0.0, "idle")
+        if should_run != self._is_active:
+            elapsed = float("inf") if self._last_change is None else now - self._last_change
+            required = min_runtime if self._is_active else min_pause
+            if elapsed < required:
+                if self._is_active:
+                    return FanDecision(fan_min, "min_runtime")
+                return FanDecision(0.0, "min_pause")
+            self._is_active = should_run
+            self._last_change = now
 
-        self._is_active = True
+        if not self._is_active:
+            return FanDecision(0.0, "idle")
         return FanDecision(fan_min + raw * (fan_max - fan_min), "auto")
+
+    def _force_off(self, reason: str, now: float) -> FanDecision:
+        """Sofort abschalten, ohne Rücksicht auf die Mindestlaufzeit.
+
+        Frostschutz und fehlende Sensordaten sind Schutzabschaltungen – sie
+        dürfen nicht durch eine laufende Mindestlaufzeit verzögert werden.
+        """
+        if self._is_active:
+            self._is_active = False
+            self._last_change = now
+        return FanDecision(0.0, reason)
