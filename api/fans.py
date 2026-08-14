@@ -10,18 +10,32 @@ class ManualSpeedRequest(BaseModel):
     speed: float = Field(..., ge=0.0, le=1.0, description="Fan speed 0.0 … 1.0")
 
 
+# Zustände, in denen der Lüfter nicht regulär regelt und der Nutzer eine
+# Erklärung braucht. "idle" gehört bewusst nicht dazu.
+BLOCKED_REASONS = {
+    "sensor_stale",
+    "no_inside_data",
+    "no_outside_data",
+    "frost",
+    "disabled",
+}
+
+
 @router.get("/status")
 async def get_status():
     """Current fan speed and control mode."""
     settings = await state.db.get_all_settings()
+    reason = state.fan_controller.last_reason
     return {
         "speed":              state.fan_controller.current_speed,
         "speed_percent":      round(state.fan_controller.current_speed * 100, 1),
         "manual_override":    settings.get("fan_manual_override", False),
         "manual_speed":       settings.get("fan_manual_speed", 0.0),
-        "control_mode":       settings.get("control_mode", "combined"),
+        "control_mode":       settings.get("control_mode", "combined_or"),
         "mock_mode":          state.fan_controller._mock,
         "regulation_enabled": settings.get("regulation_enabled", True),
+        "reason":             reason,
+        "blocked_reason":     reason if reason in BLOCKED_REASONS else None,
     }
 
 
