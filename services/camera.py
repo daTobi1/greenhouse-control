@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 try:
     import cv2
+    from services import exposure
     CV2_AVAILABLE = True
 except ImportError:
     CV2_AVAILABLE = False
@@ -66,6 +67,14 @@ _PROP_WB_TEMPERATURE = 45
 
 # V4L2: 1 = manuell, 3 = Blendenpriorität (automatisch).
 _V4L2_EXPOSURE_MANUAL = 1.0
+
+# Mehr als drei Korrekturschritte lohnen nicht: die Regelung ist gedämpft und
+# konvergiert in zwei Schritten, jeder weitere kostet nur Kamerazeit.
+_EXPOSURE_ITERATIONS = 3
+
+# Nach einer Belichtungsänderung braucht der Sensor zwei Frames, bis der neue
+# Wert wirklich im Bild ankommt.
+_EXPOSURE_SETTLE_FRAMES = 2
 
 CAMERA_PROPERTIES = [
     {"key": "auto_exposure", "prop": _PROP_AUTO_EXPOSURE,  "label": "Auto-Belichtung",    "type": "bool"},
@@ -213,6 +222,70 @@ class CameraService:
             discarded += 1
         return discarded
 
+    def _exposure_manual(self, cap) -> bool:
+        """Auto-Belichtung abschalten. True, wenn der Treiber es übernimmt."""
+        cap.set(_PROP_AUTO_EXPOSURE, _V4L2_EXPOSURE_MANUAL)
+        return abs(cap.get(_PROP_AUTO_EXPOSURE) - _V4L2_EXPOSURE_MANUAL) < 0.5
+
+    def _capture_balanced(self, cap):
+        """Frame lesen und auf die Ziel-Helligkeit regeln.
+
+        Rückgabe ist das Frame mit der geringsten Abweichung zum Ziel, oder
+        None wenn kein Frame gelesen werden konnte. Bei _target_brightness <= 0
+        wird das erste Frame unverändert zurückgegeben.
+        """
+        ok, frame = cap.read()
+        if not ok:
+            return None
+
+        target = self._target_brightness
+        if target <= 0:
+            return frame
+
+        measured = exposure.measure_brightness(frame)
+        best, best_err = frame, abs(measured - target)
+
+        if not self._exposure_manual(cap):
+            # Kamera lässt sich nicht manuell belichten – begrenzte
+            # Software-Korrektur als Notbehelf.
+            factor = exposure.software_gain(measured, target)
+            if factor is None:
+                return best
+            logger.debug(f"cam{self._camera_id}: software gain {factor:.2f}")
+            return cv2.convertScaleAbs(best, alpha=factor, beta=0)
+
+        for _ in range(_EXPOSURE_ITERATIONS):
+            if exposure.within_tolerance(measured, target, self._brightness_tol):
+                return best
+
+            current = cap.get(_PROP_EXPOSURE)
+            if current <= 0:
+                break
+
+            cap.set(_PROP_EXPOSURE, current * exposure.correction_factor(measured, target))
+            if abs(cap.get(_PROP_EXPOSURE) - current) < 1e-6:
+                # Treiber hat den Wert nicht übernommen – weitere Versuche
+                # würden nur Zeit kosten.
+                break
+
+            for _ in range(_EXPOSURE_SETTLE_FRAMES):
+                cap.read()
+            ok, frame = cap.read()
+            if not ok:
+                break
+
+            measured = exposure.measure_brightness(frame)
+            err = abs(measured - target)
+            if err < best_err:
+                best, best_err = frame, err
+
+        if best_err > self._brightness_tol:
+            logger.info(
+                f"cam{self._camera_id}: Ziel-Helligkeit {target:.0f} nicht erreicht "
+                f"(Abweichung {best_err:.0f})"
+            )
+        return best
+
     def detect_properties(self, camera_index: int) -> list[dict]:
         """Probe camera for supported properties and their value ranges."""
         if not CV2_AVAILABLE:
@@ -313,12 +386,12 @@ class CameraService:
         try:
             with self._open_capture() as cap:
                 self._apply_props(cap)
-                ret, frame = cap.read()
+                frame = self._capture_balanced(cap)
         except CameraBusy as exc:
             logger.error(f"capture_frame: {exc}")
             return None
 
-        if not ret:
+        if frame is None:
             logger.error("Failed to read frame from camera")
             return None
 
