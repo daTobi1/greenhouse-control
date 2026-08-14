@@ -168,32 +168,50 @@ class CameraService:
             if key in prop_map:
                 self._cam_props[prop_map[key]] = float(value)
 
-    def _apply_props(self, cap, warmup_frames: int = 5):
-        """Apply stored camera properties to an opened VideoCapture.
+    def _apply_props(self, cap, warmup_seconds: float | None = None):
+        """Gespeicherte Properties setzen und die Kamera einregeln lassen.
 
-        After setting properties, discard warmup_frames so the camera
-        hardware has time to adjust (first frames still carry old settings).
+        Das Warm-up läuft immer, auch ohne konfigurierte Properties: das erste
+        Frame nach dem Öffnen einer USB-Kamera ist praktisch nie korrekt
+        belichtet.
         """
-        if not self._cam_props:
-            return
-        # Auto toggles first
-        for pid in (_PROP_AUTO_WB, _PROP_AUTOFOCUS, _PROP_AUTO_EXPOSURE):
-            if pid in self._cam_props:
-                cap.set(pid, self._cam_props[pid])
-        # Manual values (skip if corresponding auto is on)
-        for pid, val in self._cam_props.items():
-            if pid in (_PROP_AUTO_WB, _PROP_AUTOFOCUS, _PROP_AUTO_EXPOSURE):
-                continue
-            if pid == _PROP_WB_TEMPERATURE and self._cam_props.get(_PROP_AUTO_WB, 0) > 0.5:
-                continue
-            if pid == _PROP_FOCUS and self._cam_props.get(_PROP_AUTOFOCUS, 0) > 0.5:
-                continue
-            if pid == _PROP_EXPOSURE and self._cam_props.get(_PROP_AUTO_EXPOSURE, 0) > 1.5:
-                continue
-            cap.set(pid, val)
-        # Discard initial frames so settings take effect on the hardware
-        for _ in range(warmup_frames):
-            cap.read()
+        if self._cam_props:
+            # Auto toggles first
+            for pid in (_PROP_AUTO_WB, _PROP_AUTOFOCUS, _PROP_AUTO_EXPOSURE):
+                if pid in self._cam_props:
+                    cap.set(pid, self._cam_props[pid])
+            # Manual values (skip if corresponding auto is on)
+            for pid, val in self._cam_props.items():
+                if pid in (_PROP_AUTO_WB, _PROP_AUTOFOCUS, _PROP_AUTO_EXPOSURE):
+                    continue
+                if pid == _PROP_WB_TEMPERATURE and self._cam_props.get(_PROP_AUTO_WB, 0) > 0.5:
+                    continue
+                if pid == _PROP_FOCUS and self._cam_props.get(_PROP_AUTOFOCUS, 0) > 0.5:
+                    continue
+                if pid == _PROP_EXPOSURE and self._cam_props.get(_PROP_AUTO_EXPOSURE, 0) > 1.5:
+                    continue
+                cap.set(pid, val)
+
+        seconds = self._warmup_seconds if warmup_seconds is None else warmup_seconds
+        self._warmup(cap, seconds)
+
+    def _warmup(self, cap, seconds: float, max_frames: int = 60) -> int:
+        """Frames verwerfen, bis die Kamera eingeregelt ist.
+
+        Zeitbasiert statt frame-basiert, weil die Bildrate je nach Auflösung
+        und Pixelformat stark schwankt. max_frames begrenzt den Aufwand bei
+        sehr hohen Bildraten und bricht bei hängender Kamera ab.
+        """
+        if seconds <= 0:
+            return 0
+        deadline = time.monotonic() + seconds
+        discarded = 0
+        while time.monotonic() < deadline and discarded < max_frames:
+            ok, _ = cap.read()
+            if not ok:
+                break
+            discarded += 1
+        return discarded
 
     def detect_properties(self, camera_index: int) -> list[dict]:
         """Probe camera for supported properties and their value ranges."""
