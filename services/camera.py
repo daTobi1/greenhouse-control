@@ -5,6 +5,7 @@ and compiles them into a video using ffmpeg.
 
 import logging
 import subprocess
+import threading
 import time
 from contextlib import contextmanager
 from datetime import datetime
@@ -115,19 +116,41 @@ def _is_on(pdef: dict, value: float | None) -> bool:
 _RESOLUTION_LABELS = {(w, h): label for w, h, label in COMMON_RESOLUTIONS if label}
 
 _detect_cache: dict[tuple, object] = {}
+_cache_guard = threading.Lock()
 
 
 def clear_detect_cache() -> None:
     """Erkennungs-Cache leeren – nach Kamerawechsel im laufenden Betrieb."""
-    _detect_cache.clear()
+    with _cache_guard:
+        _detect_cache.clear()
 
 
 def _cached(key: tuple, producer, refresh: bool = False):
-    if refresh:
-        _detect_cache.pop(key, None)
-    if key not in _detect_cache:
-        _detect_cache[key] = producer()
-    return _detect_cache[key]
+    """Ergebnis zwischenspeichern – aber nur ein brauchbares.
+
+    Leere Ergebnisse sind hier immer transient: Timeout auf dem Gerätelock oder
+    auf v4l2-ctl. Würden sie gespeichert, bliebe die leere Liste bis zum
+    Neustart erhalten und aus dem gelegentlichen Ausfall würde ein dauerhafter.
+
+    Der Lock schützt nur den Dictionary-Zugriff. Ihn über den Producer zu
+    halten würde alle Erkennungsanfragen hinter einem langsamen v4l2-ctl
+    serialisieren.
+    """
+    with _cache_guard:
+        if refresh:
+            _detect_cache.pop(key, None)
+        else:
+            cached = _detect_cache.get(key)
+            if cached:
+                return cached
+
+    value = producer()
+    if not value:
+        return value
+
+    with _cache_guard:
+        _detect_cache[key] = value
+    return value
 
 
 def _resolution_label(width: int, height: int) -> str:

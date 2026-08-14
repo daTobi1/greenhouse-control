@@ -1,3 +1,6 @@
+import threading
+import time
+
 import pytest
 
 from services import camera as camera_mod
@@ -97,6 +100,52 @@ def test_refresh_bypasses_cache(with_v4l2, monkeypatch):
     cs.detect_resolutions(0)
     cs.detect_resolutions(0, refresh=True)
     assert len(calls) == 2
+
+
+def test_empty_result_is_not_cached(with_v4l2, monkeypatch):
+    """Leere Erkennung ist transient – sie darf nicht dauerhaft hängenbleiben."""
+    calls = []
+    monkeypatch.setattr(
+        camera_mod.v4l2, "list_formats", lambda device: calls.append(device) or []
+    )
+    monkeypatch.setattr(camera_mod, "CV2_AVAILABLE", False)
+    cs = CameraService(camera_id=0)
+    assert cs.detect_resolutions(0) == []
+    assert cs.detect_resolutions(0) == []
+    assert len(calls) == 2, "Nach leerem Ergebnis muss erneut geprobt werden"
+
+
+def test_non_empty_result_is_produced_once(with_v4l2, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        camera_mod.v4l2,
+        "list_formats",
+        lambda device: calls.append(device) or list(FORMATS),
+    )
+    cs = CameraService(camera_id=0)
+    cs.detect_resolutions(0)
+    cs.detect_resolutions(0)
+    assert len(calls) == 1
+
+
+def test_late_empty_producer_cannot_clobber_a_good_result():
+    """Zwei parallele Anfragen: die langsame leere darf die gute nicht löschen."""
+    key = ("test_race", 0)
+    good = [{"width": 640, "height": 480}]
+
+    def produce_good():
+        time.sleep(0.02)
+        return list(good)
+
+    def produce_empty():
+        time.sleep(0.15)
+        return []
+
+    worker = threading.Thread(target=camera_mod._cached, args=(key, produce_good))
+    worker.start()
+    assert camera_mod._cached(key, produce_empty) == []
+    worker.join()
+    assert camera_mod._detect_cache.get(key) == good
 
 
 def test_falls_back_when_v4l2_unavailable(monkeypatch):
