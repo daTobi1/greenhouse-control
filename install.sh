@@ -192,10 +192,18 @@ fi
 SUDOERS_FILE="/etc/sudoers.d/greenhouse"
 sudo tee "$SUDOERS_FILE" > /dev/null <<EOF
 # Greenhouse Control – erlaubt dem Service-User System-Operationen
+# Beide Pfade, weil systemctl und reboot je nach Distribution unter /bin bzw.
+# /sbin oder unter /usr/bin bzw. /usr/sbin liegen. sudo vergleicht den Pfad
+# textlich – fehlt die passende Zeile, wird der Neustart nach einem Update
+# verweigert und der Dienst laeuft mit altem Code weiter.
 ${SERVICE_USER} ALL=(ALL) NOPASSWD: /sbin/reboot
+${SERVICE_USER} ALL=(ALL) NOPASSWD: /usr/sbin/reboot
 ${SERVICE_USER} ALL=(ALL) NOPASSWD: /sbin/shutdown
+${SERVICE_USER} ALL=(ALL) NOPASSWD: /usr/sbin/shutdown
 ${SERVICE_USER} ALL=(ALL) NOPASSWD: /bin/systemctl restart greenhouse
 ${SERVICE_USER} ALL=(ALL) NOPASSWD: /bin/systemctl restart greenhouse.service
+${SERVICE_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart greenhouse
+${SERVICE_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart greenhouse.service
 ${SERVICE_USER} ALL=(ALL) NOPASSWD: /usr/bin/tailscale up *, /usr/bin/tailscale up, /usr/bin/tailscale down
 EOF
 sudo chmod 440 "$SUDOERS_FILE"
