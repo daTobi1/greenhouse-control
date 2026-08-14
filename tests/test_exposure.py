@@ -25,7 +25,11 @@ def test_measure_grayscale_frame():
 
 
 def test_center_weighted_higher_than_edge_weighted():
-    """Gleich viele helle Pixel, einmal in der Mitte, einmal am Rand."""
+    """Die Mitte wiegt schwerer als der Rand – trotz halb so vieler Pixel.
+
+    Das Mittenfeld setzt 768 Pixel hell, die beiden Randstreifen zusammen 1536.
+    Die Mittengewichtung muss diesen Faktor 2 überkompensieren.
+    """
     center = _solid(0)
     center[12:36, 16:48] = 255
 
