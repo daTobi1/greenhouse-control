@@ -26,6 +26,7 @@ DEFAULT_SETTINGS = {
     "timelapse_active": False,
     "timelapse_interval": 300,        # seconds between frames
     "timelapse_fps": 25,
+    "timelapse_deflicker": True,      # Helligkeitssprünge beim Compilen ausgleichen
     "camera_index": 0,
     "fan_deadband": 0.1,             # hysteresis: min raw speed (0..1) to start fan
     "fan_manual_override": False,

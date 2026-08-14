@@ -104,11 +104,12 @@ async def compile_session(session: str, background_tasks: BackgroundTasks, cam: 
 
     settings = await state.db.get_all_settings()
     fps = int(settings.get(f"cam_{cam}_timelapse_fps", settings.get("timelapse_fps", 25)))
+    deflicker = bool(settings.get("timelapse_deflicker", True))
 
     _compile_jobs[session] = "running"
 
     def _compile():
-        result = cs.compile_timelapse(session, fps=fps)
+        result = cs.compile_timelapse(session, fps=fps, deflicker=deflicker)
         _compile_jobs[session] = "done" if result else "error"
 
     background_tasks.add_task(asyncio.to_thread, _compile)

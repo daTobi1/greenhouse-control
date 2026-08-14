@@ -28,6 +28,10 @@ DEFAULT_FOURCC = "MJPG"
 # Die Aufnahme wartet unbegrenzt, sie hat Vorrang.
 LOCK_TIMEOUT = 2.0
 
+# Fenstergröße des Deflicker-Filters. 7 Frames glätten Belichtungssprünge,
+# ohne echte Helligkeitsverläufe über den Tag flachzubügeln.
+DEFLICKER_WINDOW = 7
+
 # Reiner Marker: dokumentiert, dass FOURCC vor Breite/Höhe gesetzt werden muss.
 # Wird von tests/test_camera_open.py importiert.
 _PROP_FOURCC_ORDER_MARKER = "fourcc-before-size"
@@ -499,7 +503,15 @@ class CameraService:
     # Compilation
     # ------------------------------------------------------------------
 
-    def compile_timelapse(self, session: str, fps: int = 25) -> str | None:
+    @staticmethod
+    def build_video_filter(fps: int, deflicker: bool) -> str:
+        """ffmpeg -vf Filterkette für den Standbild-Modus."""
+        chain = [f"fps={fps}"]
+        if deflicker:
+            chain.append(f"deflicker=size={DEFLICKER_WINDOW}:mode=am")
+        return ",".join(chain)
+
+    def compile_timelapse(self, session: str, fps: int = 25, deflicker: bool = True) -> str | None:
         """Compile all frames or clips of a session into an MP4 using ffmpeg."""
         session_dir = self._frames_dir / session
         if not session_dir.exists():
@@ -539,7 +551,7 @@ class CameraService:
                     "ffmpeg", "-y",
                     "-f", "concat", "-safe", "0",
                     "-i", str(list_file),
-                    "-vf", f"fps={fps}",
+                    "-vf", self.build_video_filter(fps, deflicker),
                     "-c:v", "libx264",
                     "-pix_fmt", "yuv420p",
                     "-crf", "23",
