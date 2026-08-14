@@ -14,7 +14,22 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css?v=9" />
+  <link rel="stylesheet" href="/css/views.css?v=1" />
+  <script>
+    // Ansicht vor dem ersten Zeichnen setzen, sonst blitzt kurz die falsche auf.
+    (function () {
+      var erlaubt = ['klassisch', 'optimiert', 'mobil'];
+      var wahl = null;
+      try { wahl = localStorage.getItem('gh_view'); } catch (e) {}
+      if (erlaubt.indexOf(wahl) === -1) {
+        var grob = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+        wahl = (grob || window.innerWidth < 820) ? 'mobil' : 'optimiert';
+      }
+      document.documentElement.classList.add('view-' + wahl);
+    })();
+  </script>
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <script defer src="/js/views.js?v=1"></script>
 </head>
 <body>
 
@@ -36,7 +51,8 @@
     <span class="status-dot" id="dot-ts" title="Tailscale VPN"></span>
     <span class="status-label clickable" id="lbl-ts" onclick="openSettings()">VPN</span>
     <span id="clock" class="clock"></span>
-    <button class="btn-small" onclick="openUpdate()">Auf Updates prüfen</button>
+    <button class="btn-small" id="btn-update-check" title="Auf Updates prüfen"
+            aria-label="Auf Updates prüfen" onclick="openUpdate()">Auf Updates prüfen</button>
     <span id="update-badge" class="update-badge hidden">Neu</span>
     <a href="/trend.html" class="btn-small" title="Trendanalyse">Trends</a>
     <button class="btn-icon" onclick="openSettings()" title="Einstellungen" aria-label="Einstellungen">&#9881;</button>
@@ -59,6 +75,7 @@
       </div>
       <div class="card-meta">
         <span id="in-temp-bat">Batterie: --</span>
+        <span class="ziel-line" id="in-temp-ziel"></span>
         <span id="in-temp-ts">--</span>
       </div>
     </div>
@@ -71,6 +88,7 @@
       </div>
       <div class="card-meta">
         <span id="in-hum-extra"></span>
+        <span class="ziel-line" id="in-hum-ziel"></span>
         <span id="in-hum-ts">--</span>
       </div>
     </div>
@@ -190,6 +208,13 @@
         </div>
       </div>
 
+      <!-- Feinschliff: in der klassischen Ansicht unverändert sichtbar
+           (display:contents), in den optimierten Ansichten einklappbar. -->
+      <button type="button" class="fein-toggle" id="regelung-fein-toggle"
+              aria-expanded="false" aria-controls="regelung-fein"
+              onclick="toggleFein()">Feinschliff anzeigen</button>
+      <div id="regelung-fein" class="fein-group">
+
       <div class="control-row" data-tooltip="Wie weit die Regelgröße über dem Sollwert liegen muss, damit der Lüfter anläuft.">
         <label for="fan-start-threshold">Einschaltschwelle</label>
         <div class="input-group">
@@ -245,6 +270,8 @@
           <span class="unit">s</span>
         </div>
       </div>
+
+      </div><!-- /regelung-fein -->
 
       <button class="btn full-width" onclick="saveControlSettings()">Speichern</button>
     </div>
@@ -420,6 +447,16 @@
       </div>
 
       <h3>Anzeige</h3>
+      <div class="control-row" data-tooltip="Klassisch: die gewohnte Anordnung. Optimiert: dichter für große Bildschirme. Mobil: für Telefon und Tablet. Die Wahl gilt nur für dieses Gerät.">
+        <label for="view-mode">Ansicht</label>
+        <select id="view-mode" onchange="setView(this.value)">
+          <option value="klassisch">Klassisch</option>
+          <option value="optimiert">Optimiert (PC)</option>
+          <option value="mobil">Mobil</option>
+        </select>
+      </div>
+      <div class="hint" id="view-hint" style="margin-bottom:.6rem"></div>
+
       <div class="control-row" data-tooltip="Wartezeit bevor ein Tooltip erscheint. 0 = sofort anzeigen.">
         <label for="tooltip-delay">Tooltip-Verzögerung</label>
         <div class="input-group">
@@ -663,6 +700,6 @@
   <div class="lightbox-counter" id="lightbox-counter"></div>
 </div>
 
-<script src="/js/app.js?v=8"></script>
+<script src="/js/app.js?v=9"></script>
 </body>
 </html>
