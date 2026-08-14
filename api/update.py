@@ -22,6 +22,52 @@ PIP = PROJECT_ROOT / "venv" / ("Scripts" if sys.platform == "win32" else "bin") 
 
 _update_state: dict = {"status": "idle", "log": ""}
 
+# Je nach Distribution liegt systemctl unter /usr/bin oder /bin, und die
+# sudoers-Regel nennt genau einen dieser Pfade. sudo vergleicht den Pfad, den
+# die Suche liefert, mit dem in der Regel – stimmen sie nicht überein, wird der
+# Neustart verweigert. Deshalb der Reihe nach alle üblichen Schreibweisen.
+# `-n` verhindert, dass sudo auf eine Passworteingabe wartet, die niemand
+# machen kann.
+RESTART_COMMANDS = [
+    ["sudo", "-n", "/bin/systemctl", "restart", "greenhouse"],
+    ["sudo", "-n", "/usr/bin/systemctl", "restart", "greenhouse"],
+    ["sudo", "-n", "systemctl", "restart", "greenhouse"],
+]
+
+REBOOT_COMMANDS = [
+    ["sudo", "-n", "/sbin/reboot"],
+    ["sudo", "-n", "/usr/sbin/reboot"],
+    ["sudo", "-n", "reboot"],
+]
+
+
+def _try_commands(befehle: list, log, runner=subprocess.run, timeout: int = 15) -> bool:
+    """Befehle der Reihe nach versuchen, bis einer durchgeht."""
+    for cmd in befehle:
+        pfad = cmd[2]
+        try:
+            ergebnis = runner(cmd, capture_output=True, text=True, timeout=timeout)
+        except Exception as exc:
+            log(f"{pfad}: {exc}")
+            continue
+        if ergebnis.returncode == 0:
+            log(f"{pfad}: ausgeführt.")
+            return True
+        log(f"{pfad}: {(ergebnis.stderr or '').strip()[:120]}")
+    return False
+
+
+def _restart_service(log, runner=subprocess.run) -> bool:
+    """Dienst neu starten, damit der frisch geholte Code aktiv wird."""
+    if _try_commands(RESTART_COMMANDS, log, runner):
+        log("Service neu gestartet.")
+        return True
+    log(
+        "Neustart nicht moeglich. Der neue Code liegt bereit und wird beim "
+        "naechsten Start des Dienstes aktiv – etwa ueber den Neustart-Knopf."
+    )
+    return False
+
 
 class RollbackRequest(BaseModel):
     commit: str
@@ -142,7 +188,7 @@ async def reboot_system(background_tasks: BackgroundTasks):
 
 def _do_reboot():
     time.sleep(2)
-    subprocess.run(["sudo", "reboot"], check=False)
+    _try_commands(REBOOT_COMMANDS, logger.info)
 
 
 def _apply(target: str, fetch_first: bool = False):
@@ -174,15 +220,14 @@ def _apply(target: str, fetch_first: bool = False):
             if pip.returncode != 0:
                 log(f"pip Warnung: {pip.stderr[:200]}")
 
+        # Welcher Stand jetzt auf der Platte liegt – hilft beim Nachsehen,
+        # wenn der Neustart scheitert.
+        stand = _run(["git", "rev-parse", "--short", "HEAD"], timeout=5)
+        if stand.returncode == 0:
+            log(f"Neuer Stand: {stand.stdout.strip()}")
+
         log("Starte Service neu...")
-        restart = subprocess.run(
-            ["sudo", "systemctl", "restart", "greenhouse"],
-            capture_output=True, text=True, timeout=15,
-        )
-        if restart.returncode == 0:
-            log("Service neu gestartet.")
-        else:
-            log(f"systemctl: {restart.stderr.strip()} (Mock-Mode oder kein systemd?)")
+        _restart_service(log)
 
         _update_state["status"] = "done"
         log("Abgeschlossen.")
