@@ -761,13 +761,17 @@ async function loadFps(ci, devIdx, resolution, refresh = false) {
       sel.appendChild(opt);
     });
   } catch(e) {
-    sel.innerHTML = '';
-    fallback.forEach(fps => {
-      const opt = document.createElement('option');
-      opt.value = fps;
-      opt.textContent = `${fps} fps`;
-      sel.appendChild(opt);
-    });
+    // Netzwerkfehler darf die gespeicherte Auswahl nicht überschreiben.
+    // Die Ersatzliste nur füllen, wenn es nichts zu erhalten gibt.
+    if (!sel.options.length) {
+      fallback.forEach(fps => {
+        const opt = document.createElement('option');
+        opt.value = fps;
+        opt.textContent = `${fps} fps`;
+        sel.appendChild(opt);
+      });
+    }
+    showToast('Bildraten konnten nicht geladen werden – unverändert');
   }
   if ([...sel.options].some(o => o.value === saved)) sel.value = saved;
   sel.disabled = false;
