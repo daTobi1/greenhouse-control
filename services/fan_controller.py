@@ -18,6 +18,7 @@ Proportional control algorithm:
 """
 
 import logging
+import threading
 import time
 from dataclasses import dataclass
 
@@ -47,6 +48,10 @@ class FanDecision:
 
 
 class FanController:
+    # Die Frostgrenze braucht ein Band, sonst schaltet der Lüfter bei exakt
+    # der Grenztemperatur genauso im Minutentakt wie ohne Drehzahl-Hysterese.
+    FROST_HYSTERESIS = 1.0
+
     def __init__(self):
         self._gpio_pin: int = 18
         self._frequency: int = 25_000   # 25 kHz – inaudible for most fans
@@ -55,6 +60,8 @@ class FanController:
         self._mock = not GPIO_AVAILABLE
         self._is_active: bool = False  # hysteresis state
         self._last_change: float | None = None   # time.monotonic() des letzten Zustandswechsels
+        self._frost_blocked: bool = False
+        self.kickstart_duration: float = 0.6
 
     # ------------------------------------------------------------------
     # Setup / teardown
@@ -91,13 +98,47 @@ class FanController:
     # ------------------------------------------------------------------
 
     def set_speed(self, speed: float):
-        """Set fan speed 0.0 … 1.0."""
+        """Set fan speed 0.0 … 1.0.
+
+        Beim Anlaufen aus dem Stillstand wird kurz auf 100 % gefahren: viele
+        DC-Lüfter kommen bei 20 % PWM nicht aus dem Stand und brummen nur.
+        """
         speed = max(0.0, min(1.0, speed))
+        kickstart = self._needs_kickstart(speed)
         self._current_speed = speed
-        duty = speed * 100.0
+
+        if self._mock or not self._pwm:
+            logger.debug(f"Fan speed → {speed:.1%}")
+            return
+
+        if kickstart:
+            self._pwm.ChangeDutyCycle(100.0)
+            timer = threading.Timer(self.kickstart_duration, self._apply_duty, args=(speed,))
+            timer.daemon = True
+            timer.start()
+            logger.debug(f"Fan kickstart {self.kickstart_duration:.1f}s → {speed:.1%}")
+            return
+
+        self._pwm.ChangeDutyCycle(speed * 100.0)
+        logger.debug(f"Fan speed → {speed:.1%}")
+
+    def _needs_kickstart(self, new_speed: float) -> bool:
+        return (
+            self.kickstart_duration > 0
+            and new_speed > 0
+            and self._current_speed == 0.0
+        )
+
+    def _apply_duty(self, speed: float):
+        """Nach dem Kickstart auf die Zieldrehzahl gehen.
+
+        Hat sich die Zielgeschwindigkeit inzwischen geändert, hat der neuere
+        set_speed-Aufruf Vorrang.
+        """
+        if self._current_speed != speed:
+            return
         if not self._mock and self._pwm:
-            self._pwm.ChangeDutyCycle(duty)
-        logger.debug(f"Fan speed → {speed:.1%}  ({duty:.1f}% duty)")
+            self._pwm.ChangeDutyCycle(speed * 100.0)
 
     @property
     def current_speed(self) -> float:
@@ -143,7 +184,13 @@ class FanController:
         i_temp = inside.get("temperature", 0.0)
         i_hum  = inside.get("humidity", 0.0)
 
-        if i_temp < min_temp:
+        if self._frost_blocked:
+            if i_temp >= min_temp + self.FROST_HYSTERESIS:
+                self._frost_blocked = False
+        elif i_temp < min_temp:
+            self._frost_blocked = True
+
+        if self._frost_blocked:
             return self._force_off("frost", now)
 
         if not outside:

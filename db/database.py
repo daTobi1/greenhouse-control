@@ -38,6 +38,7 @@ DEFAULT_SETTINGS = {
     "fan_stop_threshold": 0.03,   # Rohwert, unter dem er wieder abschaltet
     "fan_min_runtime": 120,       # Sekunden Mindestlaufzeit
     "fan_min_pause": 60,          # Sekunden Mindestpause
+    "fan_kickstart_duration": 0.6,  # Sekunden 100-%-Anlaufpuls, 0 = aus
     "settings_migrated_thresholds": False,
     "update_check_interval_days": 7,  # 0 = deaktiviert
     "timelapse_path": "timelapse",
