@@ -940,8 +940,14 @@ function renderCamProps(ci, props) {
   const host = document.getElementById(`cam-props-${ci}`);
   if (!host) return;
 
+  // Ein Schalter ist nicht zwangsläufig 0/1: exposure_auto ist ein V4L2-Menü
+  // (3 = automatisch, 1 = manuell). Die Wertedomäne kommt aus der API.
+  const onValue  = p => (p.on_value  ?? 1);
+  const offValue = p => (p.off_value ?? 0);
+  const isOn     = p => Math.abs(p.value - onValue(p)) < 0.5;
+
   const autoOn = {};
-  props.filter(p => p.type === 'bool').forEach(p => { autoOn[p.key] = p.value > 0.5; });
+  props.filter(p => p.type === 'bool').forEach(p => { autoOn[p.key] = isOn(p); });
 
   host.innerHTML = props.map(p => {
     const id  = `cam-prop-${p.key}-${ci}`;
@@ -949,13 +955,13 @@ function renderCamProps(ci, props) {
     const cls = p.supported === false ? ' unsupported' : '';
 
     if (p.type === 'bool') {
-      const checked = p.value > 0.5 ? ' checked' : '';
+      const checked = isOn(p) ? ' checked' : '';
       return `
         <div class="cam-prop-row${cls}">
           <label>${escHtml(p.label)}</label>
           <label class="toggle-switch">
             <input type="checkbox" id="${id}"${checked}${dis}
-                   onchange="setCamProp(${ci},'${p.key}',this.checked?1:0)" />
+                   onchange="setCamProp(${ci},'${p.key}',this.checked?${onValue(p)}:${offValue(p)})" />
             <span class="toggle-slider"></span>
           </label>
         </div>`;

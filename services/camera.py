@@ -74,7 +74,9 @@ _PROP_AUTO_WB        = 44
 _PROP_WB_TEMPERATURE = 45
 
 # V4L2: 1 = manuell, 3 = Blendenpriorität (automatisch).
+# exposure_auto ist ein Menü, kein Boolean – 0 lehnt uvcvideo ab.
 _V4L2_EXPOSURE_MANUAL = 1.0
+_V4L2_EXPOSURE_AUTO = 3.0
 
 # Mehr als drei Korrekturschritte lohnen nicht: die Regelung ist gedämpft und
 # konvergiert in zwei Schritten, jeder weitere kostet nur Kamerazeit.
@@ -84,19 +86,31 @@ _EXPOSURE_ITERATIONS = 3
 # Wert wirklich im Bild ankommt.
 _EXPOSURE_SETTLE_FRAMES = 2
 
+# type "bool" heißt "Schalter", nicht "0 oder 1": on_value/off_value machen die
+# Wertedomäne explizit, damit Backend und Frontend nicht raten müssen.
 CAMERA_PROPERTIES = [
-    {"key": "auto_exposure", "prop": _PROP_AUTO_EXPOSURE,  "label": "Auto-Belichtung",    "type": "bool"},
+    {"key": "auto_exposure", "prop": _PROP_AUTO_EXPOSURE,  "label": "Auto-Belichtung",    "type": "bool",  "on_value": _V4L2_EXPOSURE_AUTO, "off_value": _V4L2_EXPOSURE_MANUAL},
     {"key": "exposure",      "prop": _PROP_EXPOSURE,       "label": "Belichtung",         "type": "range", "min": 1,    "max": 5000,  "step": 1,   "auto_key": "auto_exposure"},
     {"key": "gain",          "prop": _PROP_GAIN,           "label": "Verstärkung",        "type": "range", "min": 0,    "max": 255,   "step": 1},
     {"key": "brightness",    "prop": _PROP_BRIGHTNESS,     "label": "Helligkeit",         "type": "range", "min": 0,    "max": 255,   "step": 1},
     {"key": "gamma",         "prop": _PROP_GAMMA,          "label": "Gamma",              "type": "range", "min": 1,    "max": 500,   "step": 1},
-    {"key": "auto_wb",       "prop": _PROP_AUTO_WB,        "label": "Auto-Weissabgleich", "type": "bool"},
+    {"key": "auto_wb",       "prop": _PROP_AUTO_WB,        "label": "Auto-Weissabgleich", "type": "bool",  "on_value": 1.0, "off_value": 0.0},
     {"key": "white_balance", "prop": _PROP_WB_TEMPERATURE, "label": "Weissabgleich",      "type": "range", "min": 2000, "max": 10000, "step": 100, "unit": "K", "auto_key": "auto_wb"},
     {"key": "contrast",      "prop": _PROP_CONTRAST,       "label": "Kontrast",           "type": "range", "min": 0,    "max": 255,   "step": 1},
-    {"key": "autofocus",     "prop": _PROP_AUTOFOCUS,      "label": "Auto-Fokus",         "type": "bool"},
+    {"key": "autofocus",     "prop": _PROP_AUTOFOCUS,      "label": "Auto-Fokus",         "type": "bool",  "on_value": 1.0, "off_value": 0.0},
     {"key": "focus",         "prop": _PROP_FOCUS,          "label": "Fokus",              "type": "range", "min": 0,    "max": 255,   "step": 1,   "auto_key": "autofocus"},
     {"key": "zoom",          "prop": _PROP_ZOOM,           "label": "Zoom",               "type": "range", "min": 100,  "max": 800,   "step": 10},
 ]
+
+_PROP_BY_KEY = {p["key"]: p for p in CAMERA_PROPERTIES}
+_PROP_BY_ID = {p["prop"]: p for p in CAMERA_PROPERTIES}
+_BOOL_PROPS = [p for p in CAMERA_PROPERTIES if p["type"] == "bool"]
+
+
+def _is_on(pdef: dict, value: float | None) -> bool:
+    """True, wenn value dem deklarierten on_value des Schalters entspricht."""
+    return value is not None and abs(float(value) - pdef["on_value"]) < 0.5
+
 
 _RESOLUTION_LABELS = {(w, h): label for w, h, label in COMMON_RESOLUTIONS if label}
 
@@ -256,24 +270,30 @@ class CameraService:
         belichtet.
         """
         if self._cam_props:
-            # Auto toggles first
-            for pid in (_PROP_AUTO_WB, _PROP_AUTOFOCUS, _PROP_AUTO_EXPOSURE):
+            # Auto-Schalter zuerst: ein manueller Wert würde sonst sofort vom
+            # noch laufenden Automatikmodus überschrieben.
+            for pdef in _BOOL_PROPS:
+                pid = pdef["prop"]
                 if pid in self._cam_props:
                     cap.set(pid, self._cam_props[pid])
-            # Manual values (skip if corresponding auto is on)
+            # Manuelle Werte, sofern ihr Auto-Schalter nicht auf on_value steht.
             for pid, val in self._cam_props.items():
-                if pid in (_PROP_AUTO_WB, _PROP_AUTOFOCUS, _PROP_AUTO_EXPOSURE):
+                pdef = _PROP_BY_ID.get(pid)
+                if pdef is None or pdef["type"] == "bool":
                     continue
-                if pid == _PROP_WB_TEMPERATURE and self._cam_props.get(_PROP_AUTO_WB, 0) > 0.5:
-                    continue
-                if pid == _PROP_FOCUS and self._cam_props.get(_PROP_AUTOFOCUS, 0) > 0.5:
-                    continue
-                if pid == _PROP_EXPOSURE and self._cam_props.get(_PROP_AUTO_EXPOSURE, 0) > 1.5:
+                if self._auto_engaged(pdef):
                     continue
                 cap.set(pid, val)
 
         seconds = self._warmup_seconds if warmup_seconds is None else warmup_seconds
         self._warmup(cap, seconds)
+
+    def _auto_engaged(self, pdef: dict) -> bool:
+        """Steht der zu pdef gehörende Auto-Schalter auf seinem on_value?"""
+        auto_def = _PROP_BY_KEY.get(pdef.get("auto_key", ""))
+        if auto_def is None:
+            return False
+        return _is_on(auto_def, self._cam_props.get(auto_def["prop"]))
 
     def _warmup(self, cap, seconds: float, max_frames: int = 60) -> int:
         """Frames verwerfen, bis die Kamera eingeregelt ist.
@@ -386,22 +406,39 @@ class CameraService:
                     entry["auto_key"] = pdef["auto_key"]
 
                 if pdef["type"] == "range":
-                    cap.set(pid, pdef["min"])
-                    actual_min = cap.get(pid)
-                    cap.set(pid, pdef["max"])
-                    actual_max = cap.get(pid)
-                    cap.set(pid, current)
+                    # Solange der zugehörige Automatikmodus läuft, weist der
+                    # Treiber jeden Schreibzugriff ab und die Property gälte
+                    # fälschlich als nicht unterstützt.
+                    auto_def = _PROP_BY_KEY.get(pdef.get("auto_key", ""))
+                    auto_prev = None
+                    if auto_def is not None:
+                        auto_prev = cap.get(auto_def["prop"])
+                        cap.set(auto_def["prop"], auto_def["off_value"])
+                    try:
+                        cap.set(pid, pdef["min"])
+                        actual_min = cap.get(pid)
+                        cap.set(pid, pdef["max"])
+                        actual_max = cap.get(pid)
+                        cap.set(pid, current)
+                    finally:
+                        if auto_def is not None:
+                            cap.set(auto_def["prop"], auto_prev)
                     supported = abs(actual_max - actual_min) > 0.001
                     entry["min"] = actual_min if supported else pdef["min"]
                     entry["max"] = actual_max if supported else pdef["max"]
                     entry["step"] = pdef["step"]
                     entry["supported"] = supported
                 else:
-                    test = 0.0 if current > 0.5 else 1.0
+                    on_value, off_value = pdef["on_value"], pdef["off_value"]
+                    # Gegen den jeweils anderen deklarierten Wert testen – 0 ist
+                    # für ein Menü wie exposure_auto kein gültiger Wert.
+                    test = off_value if _is_on(pdef, current) else on_value
                     cap.set(pid, test)
                     readback = cap.get(pid)
                     supported = abs(readback - test) < 0.5
                     cap.set(pid, current)
+                    entry["on_value"] = on_value
+                    entry["off_value"] = off_value
                     entry["supported"] = supported
 
                 result.append(entry)
