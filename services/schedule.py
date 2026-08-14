@@ -9,7 +9,7 @@ bewusst akzeptiert, das Kulanzfenster fängt den Normalfall ab.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 
 MODE_INTERVAL = "interval"
 MODE_TIMES = "times"
@@ -30,6 +30,8 @@ class ScheduleConfig:
     end: time | None
     times: tuple[time, ...]
     grace_seconds: float
+    date_from: date | None = None
+    date_to: date | None = None
 
 
 def parse_time(value) -> time | None:
@@ -45,6 +47,16 @@ def parse_time(value) -> time | None:
         return None
     try:
         return time(*numbers)
+    except ValueError:
+        return None
+
+
+def parse_date(value) -> date | None:
+    """YYYY-MM-DD in ein date-Objekt. Sonst None."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return date.fromisoformat(value.strip())
     except ValueError:
         return None
 
@@ -82,6 +94,8 @@ def parse_config(settings: dict, cam: int) -> ScheduleConfig:
         end=parse_time(cam_get("schedule_end", None)),
         times=times,
         grace_seconds=float(cam_get("schedule_grace", DEFAULT_GRACE_SECONDS)),
+        date_from=parse_date(cam_get("date_from", None)),
+        date_to=parse_date(cam_get("date_to", None)),
     )
 
 
@@ -94,10 +108,24 @@ def next_due(
 
     Es wird nie ein Zeitpunkt in der Vergangenheit geliefert; verpasste
     Aufnahmen verfallen dadurch von selbst.
+
+    Der optionale Zeitraum date_from..date_to begrenzt den Plan. date_to ist
+    einschliesslich: am Enddatum wird noch aufgenommen. Vor date_from wird None
+    geliefert; der Loop fragt beim naechsten Durchlauf erneut.
     """
+    if cfg.date_from is not None and now.date() < cfg.date_from:
+        return None
+
     if cfg.mode == MODE_TIMES:
-        return _times_next(now, cfg)
-    return _interval_next(now, cfg, last_capture)
+        candidate = _times_next(now, cfg)
+    else:
+        candidate = _interval_next(now, cfg, last_capture)
+
+    if candidate is None:
+        return None
+    if cfg.date_to is not None and candidate.date() > cfg.date_to:
+        return None
+    return candidate
 
 
 def _times_next(now: datetime, cfg: ScheduleConfig) -> datetime | None:
@@ -123,12 +151,20 @@ def _interval_next(
         return now if last_capture is None else last_capture + step
 
     # Mit Startzeit läuft ein festes Raster ab der Startzeit des jeweiligen
-    # Tages. Der Versatz -1 ist für Fenster über Mitternacht nötig: um 02:10
-    # gehört man noch zum Fenster, das gestern um 22:00 begonnen hat. Ohne
-    # Ende gibt es kein Fenster, das über Mitternacht reichen könnte – der
-    # Versatz -1 würde dann fälschlich Raster-Punkte von gestern früh in den
-    # heutigen Morgen vor der eigentlichen Startzeit hineinstreuen.
-    offsets = (-1, 0, 1) if cfg.end is not None else (0, 1)
+    # Tages.
+
+    # Erste-Tag-Regel: Solange nichts aufgenommen wurde und die heutige Startzeit
+    # noch bevorsteht, wird auf sie gewartet. Ohne diese Regel wuerde eine um 04:00
+    # gestartete Aufnahme sofort auf dem Raster von gestern ausloesen.
+    if cfg.end is None and last_capture is None:
+        today_start = datetime.combine(now.date(), cfg.start)
+        if now < today_start:
+            return today_start
+
+    # Versatz -1 deckt zwei Faelle ab: ein Fenster, das ueber Mitternacht laeuft,
+    # und ein unbegrenztes Raster, das nach der ersten Aufnahme lueckenlos
+    # weiterlaufen soll.
+    offsets = (-1, 0, 1) if (cfg.end is not None or last_capture is not None) else (0, 1)
     for day_offset in offsets:
         anchor = datetime.combine(now.date() + timedelta(days=day_offset), cfg.start)
         window_end = _window_end(anchor, cfg.start, cfg.end)
