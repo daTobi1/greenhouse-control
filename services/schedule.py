@@ -9,7 +9,7 @@ bewusst akzeptiert, das Kulanzfenster fängt den Normalfall ab.
 """
 
 from dataclasses import dataclass
-from datetime import time
+from datetime import datetime, time, timedelta
 
 MODE_INTERVAL = "interval"
 MODE_TIMES = "times"
@@ -83,3 +83,32 @@ def parse_config(settings: dict, cam: int) -> ScheduleConfig:
         times=times,
         grace_seconds=float(cam_get("schedule_grace", DEFAULT_GRACE_SECONDS)),
     )
+
+
+def next_due(
+    now: datetime,
+    cfg: ScheduleConfig,
+    last_capture: datetime | None,
+) -> datetime | None:
+    """Nächster Aufnahmezeitpunkt, oder None wenn keiner bestimmbar ist.
+
+    Es wird nie ein Zeitpunkt in der Vergangenheit geliefert; verpasste
+    Aufnahmen verfallen dadurch von selbst.
+    """
+    if cfg.mode == MODE_TIMES:
+        return _times_next(now, cfg)
+    return _interval_next(now, cfg, last_capture)
+
+
+def _times_next(now: datetime, cfg: ScheduleConfig) -> datetime | None:
+    if not cfg.times:
+        return None
+    for t in cfg.times:
+        candidate = datetime.combine(now.date(), t)
+        if candidate > now:
+            return candidate
+    return datetime.combine(now.date() + timedelta(days=1), cfg.times[0])
+
+
+def _interval_next(now, cfg, last_capture):
+    return None
