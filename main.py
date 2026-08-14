@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 import state
-from services.camera import CAMERA_PROPERTIES
+from services.camera import CAMERA_PROPERTIES, camera_setup_kwargs
 from services.scheduler import Scheduler
 
 logging.basicConfig(
@@ -33,22 +33,7 @@ async def lifespan(app: FastAPI):
     camera_count = int(settings.get("camera_count", 1))
     for i in range(camera_count):
         cam = state.get_camera(i)
-        # Per-camera settings, with fallback to legacy keys for camera 0
-        if i == 0:
-            dev_idx = int(settings.get("cam_0_device_index", settings.get("camera_index", 0)))
-            cap_w   = int(settings.get("cam_0_capture_width", settings.get("camera_capture_width", 0)))
-            cap_h   = int(settings.get("cam_0_capture_height", settings.get("camera_capture_height", 0)))
-        else:
-            dev_idx = int(settings.get(f"cam_{i}_device_index", i))
-            cap_w   = int(settings.get(f"cam_{i}_capture_width", 0))
-            cap_h   = int(settings.get(f"cam_{i}_capture_height", 0))
-        cam.setup(
-            frames_dir=f"{tl_path}/cam{i}/frames",
-            output_dir=f"{tl_path}/cam{i}/output",
-            camera_index=dev_idx,
-            capture_width=cap_w,
-            capture_height=cap_h,
-        )
+        cam.setup(**camera_setup_kwargs(settings, i, tl_path))
         # Load saved camera properties (white balance, contrast, focus, zoom)
         cam_props: dict[str, float] = {}
         for pdef in CAMERA_PROPERTIES:

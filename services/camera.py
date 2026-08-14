@@ -125,6 +125,33 @@ def _formats_for(camera_index: int, refresh: bool = False) -> list[dict]:
     )
 
 
+def camera_setup_kwargs(settings: dict, cam: int, tl_path: str) -> dict:
+    """Setup-Parameter einer Kamera aus den Settings ableiten.
+
+    Kamera 0 fällt auf die alten, kameraunabhängigen Schlüssel zurück, damit
+    bestehende Installationen ihre Einstellungen behalten.
+    """
+    def cam_get(name: str, default, legacy: str | None = None):
+        key = f"cam_{cam}_{name}"
+        if key in settings:
+            return settings[key]
+        if cam == 0 and legacy is not None and legacy in settings:
+            return settings[legacy]
+        return default
+
+    return {
+        "frames_dir": f"{tl_path}/cam{cam}/frames",
+        "output_dir": f"{tl_path}/cam{cam}/output",
+        "camera_index": int(cam_get("device_index", cam, "camera_index")),
+        "capture_width": int(cam_get("capture_width", 0, "camera_capture_width")),
+        "capture_height": int(cam_get("capture_height", 0, "camera_capture_height")),
+        "fourcc": str(cam_get("fourcc", DEFAULT_FOURCC)),
+        "target_brightness": float(cam_get("target_brightness", 120.0)),
+        "brightness_tol": float(cam_get("brightness_tol", 12.0)),
+        "warmup_seconds": float(cam_get("warmup_seconds", 1.5)),
+    }
+
+
 class CameraService:
     def __init__(self, camera_id: int = 0):
         self._camera_id: int = camera_id
@@ -153,6 +180,9 @@ class CameraService:
         capture_width: int = 0,
         capture_height: int = 0,
         fourcc: str = DEFAULT_FOURCC,
+        target_brightness: float = 120.0,
+        brightness_tol: float = 12.0,
+        warmup_seconds: float = 1.5,
     ):
         self._frames_dir = Path(frames_dir)
         self._output_dir = Path(output_dir)
@@ -160,6 +190,9 @@ class CameraService:
         self._capture_width = capture_width
         self._capture_height = capture_height
         self._fourcc = fourcc or DEFAULT_FOURCC
+        self._target_brightness = float(target_brightness)
+        self._brightness_tol = float(brightness_tol)
+        self._warmup_seconds = float(warmup_seconds)
         self._frames_dir.mkdir(parents=True, exist_ok=True)
         self._output_dir.mkdir(parents=True, exist_ok=True)
 

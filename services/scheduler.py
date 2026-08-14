@@ -7,6 +7,7 @@ import asyncio
 import logging
 
 import state as _state
+from services.camera import camera_setup_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -174,33 +175,21 @@ class Scheduler:
                 if cam_idx == 0:
                     active       = settings.get("cam_0_timelapse_active", settings.get("timelapse_active", False))
                     interval     = float(settings.get("cam_0_timelapse_interval", settings.get("timelapse_interval", 300)))
-                    dev_idx      = int(settings.get("cam_0_device_index", settings.get("camera_index", 0)))
-                    cap_w        = int(settings.get("cam_0_capture_width", settings.get("camera_capture_width", 0)))
-                    cap_h        = int(settings.get("cam_0_capture_height", settings.get("camera_capture_height", 0)))
                     capture_mode = settings.get("cam_0_capture_mode", settings.get("capture_mode", "still"))
                     clip_duration= float(settings.get("cam_0_clip_duration", settings.get("clip_duration", 5)))
                     clip_fps     = int(settings.get("cam_0_clip_fps", settings.get("clip_fps", 10)))
                 else:
                     active       = settings.get(f"cam_{cam_idx}_timelapse_active", False)
                     interval     = float(settings.get(f"cam_{cam_idx}_timelapse_interval", 300))
-                    dev_idx      = int(settings.get(f"cam_{cam_idx}_device_index", cam_idx))
-                    cap_w        = int(settings.get(f"cam_{cam_idx}_capture_width", 0))
-                    cap_h        = int(settings.get(f"cam_{cam_idx}_capture_height", 0))
                     capture_mode = settings.get(f"cam_{cam_idx}_capture_mode", "still")
                     clip_duration= float(settings.get(f"cam_{cam_idx}_clip_duration", 5))
                     clip_fps     = int(settings.get(f"cam_{cam_idx}_clip_fps", 10))
 
                 # Setup nur bei Konfigurationsänderung
-                cam_config = (tl_path, dev_idx, cap_w, cap_h)
-                if cam_config != last_cam_config:
-                    cam.setup(
-                        frames_dir=f"{tl_path}/cam{cam_idx}/frames",
-                        output_dir=f"{tl_path}/cam{cam_idx}/output",
-                        camera_index=dev_idx,
-                        capture_width=cap_w,
-                        capture_height=cap_h,
-                    )
-                    last_cam_config = cam_config
+                kwargs = camera_setup_kwargs(settings, cam_idx, tl_path)
+                if kwargs != last_cam_config:
+                    cam.setup(**kwargs)
+                    last_cam_config = kwargs
 
                 if active:
                     if not cam.is_capturing:

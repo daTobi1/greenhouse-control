@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel
 
 import state
-from services.camera import CAMERA_PROPERTIES
+from services.camera import CAMERA_PROPERTIES, CameraBusy
 
 router = APIRouter()
 
@@ -62,6 +62,10 @@ async def get_status(cam: int = Query(0, ge=0)):
         "clip_duration":   clip_duration,
         "clip_fps":        clip_fps,
         "camera_available": cs._frames_dir is not None,
+        "fourcc":            settings.get(f"cam_{cam}_fourcc", "MJPG"),
+        "target_brightness": settings.get(f"cam_{cam}_target_brightness", 120),
+        "brightness_tol":    settings.get(f"cam_{cam}_brightness_tol", 12),
+        "warmup_seconds":    settings.get(f"cam_{cam}_warmup_seconds", 1.5),
     }
 
 
@@ -176,26 +180,51 @@ async def delete_session(session: str, cam: int = Query(0, ge=0)):
 
 
 @router.get("/cameras")
-async def detect_cameras():
-    """Scan for available camera devices (non-blocking thread)."""
+async def detect_cameras(refresh: bool = Query(False)):
+    """Scan for available camera devices (non-blocking thread). refresh=1 umgeht den Cache."""
     cs = _cam(0)
-    cameras = await asyncio.to_thread(cs.detect_cameras)
+    try:
+        cameras = await asyncio.to_thread(cs.detect_cameras, refresh)
+    except CameraBusy as exc:
+        raise HTTPException(409, str(exc))
     return {"cameras": cameras}
 
 
 @router.get("/resolutions")
-async def detect_resolutions(camera: int = Query(0, ge=0)):
+async def detect_resolutions(camera: int = Query(0, ge=0), refresh: bool = Query(False)):
     """Return resolutions supported by the given camera index."""
     cs = _cam(0)
-    resolutions = await asyncio.to_thread(cs.detect_resolutions, camera)
+    try:
+        resolutions = await asyncio.to_thread(cs.detect_resolutions, camera, refresh)
+    except CameraBusy as exc:
+        raise HTTPException(409, str(exc))
     return {"resolutions": resolutions}
 
 
+@router.get("/formats")
+async def detect_formats(camera: int = Query(0, ge=0), refresh: bool = Query(False)):
+    """Pixelformate, die der Treiber meldet."""
+    cs = _cam(0)
+    try:
+        formats = await asyncio.to_thread(cs.detect_formats, camera, refresh)
+    except CameraBusy as exc:
+        raise HTTPException(409, str(exc))
+    return {"formats": formats}
+
+
 @router.get("/fps")
-async def detect_fps(camera: int = Query(0, ge=0), width: int = Query(0), height: int = Query(0)):
+async def detect_fps(
+    camera: int = Query(0, ge=0),
+    width: int = Query(0),
+    height: int = Query(0),
+    refresh: bool = Query(False),
+):
     """Return FPS values the camera supports at the given resolution."""
     cs = _cam(0)
-    fps_list = await asyncio.to_thread(cs.detect_fps, camera, width, height)
+    try:
+        fps_list = await asyncio.to_thread(cs.detect_fps, camera, width, height, refresh)
+    except CameraBusy as exc:
+        raise HTTPException(409, str(exc))
     return {"fps": fps_list}
 
 
@@ -276,7 +305,10 @@ async def get_camera_properties(cam: int = Query(0, ge=0)):
     else:
         dev_idx = int(settings.get(f"cam_{cam}_device_index", cam))
 
-    props = await asyncio.to_thread(cs.detect_properties, dev_idx)
+    try:
+        props = await asyncio.to_thread(cs.detect_properties, dev_idx)
+    except CameraBusy as exc:
+        raise HTTPException(409, str(exc))
 
     # Override detected values with saved settings
     for p in props:
@@ -312,7 +344,10 @@ async def set_camera_properties(updates: dict[str, Any], cam: int = Query(0, ge=
 async def camera_preview(cam: int = Query(0, ge=0)):
     """Return a live JPEG preview from the camera."""
     cs = _cam(cam)
-    data = await asyncio.to_thread(cs.capture_preview)
+    try:
+        data = await asyncio.to_thread(cs.capture_preview)
+    except CameraBusy as exc:
+        raise HTTPException(409, str(exc))
     if data is None:
         raise HTTPException(503, "Camera not available")
     return Response(content=data, media_type="image/jpeg")
