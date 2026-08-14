@@ -62,6 +62,7 @@ class FanController:
         self._last_change: float | None = None   # time.monotonic() des letzten Zustandswechsels
         self._frost_blocked: bool = False
         self.kickstart_duration: float = 0.6
+        self.last_reason: str = "idle"   # letzte Begründung, für die API
 
     # ------------------------------------------------------------------
     # Setup / teardown

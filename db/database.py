@@ -39,6 +39,7 @@ DEFAULT_SETTINGS = {
     "fan_min_runtime": 120,       # Sekunden Mindestlaufzeit
     "fan_min_pause": 60,          # Sekunden Mindestpause
     "fan_kickstart_duration": 0.6,  # Sekunden 100-%-Anlaufpuls, 0 = aus
+    "sensor_max_age": 300,   # Sekunden, ab wann Messwerte als veraltet gelten
     "settings_migrated_thresholds": False,
     "update_check_interval_days": 7,  # 0 = deaktiviert
     "timelapse_path": "timelapse",

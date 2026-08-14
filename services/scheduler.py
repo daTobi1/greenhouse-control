@@ -84,6 +84,7 @@ class Scheduler:
     async def _fan_loop(self):
         configured_pin = None
         last_logged_speed = None
+        last_logged_reason = None
         while self._running:
             try:
                 settings = await self._db.get_all_settings()
@@ -95,39 +96,38 @@ class Scheduler:
                     configured_pin = gpio_pin
 
                 regulation_enabled = settings.get("regulation_enabled", True)
+                max_age = float(settings.get("sensor_max_age") or 300)
+                self._fan.kickstart_duration = float(
+                    settings.get("fan_kickstart_duration", 0.6)
+                )
 
                 if not regulation_enabled:
                     self._fan.set_speed(0.0)
-                    speed = 0.0
-                    reason = "disabled"
-                    if speed != last_logged_speed:
-                        await self._db.log_fan_event(speed, reason)
-                        last_logged_speed = speed
-                    await asyncio.sleep(interval)
-                    continue
-
-                manual_override = settings.get("fan_manual_override", False)
-
-                if manual_override:
+                    speed, reason = 0.0, "disabled"
+                elif settings.get("fan_manual_override", False):
                     speed = float(settings.get("fan_manual_speed", 0.0))
                     self._fan.set_speed(speed)
                     reason = "manual"
                 else:
-                    inside  = self._sb.get_sensor_data("inside")
-                    outside = self._sb.get_sensor_data("outside")
-                    if inside:
-                        decision = self._fan.calculate_speed(inside, outside, settings)
-                        speed = decision.speed
-                        self._fan.set_speed(speed)
-                        reason = decision.reason
+                    inside = self._sb.get_sensor_data("inside", max_age_s=max_age)
+                    if inside is None:
+                        # Nicht auf einem eingefrorenen Messwert weiterregeln.
+                        self._fan.set_speed(0.0)
+                        speed, reason = 0.0, "sensor_stale"
                     else:
-                        speed = None
-                        reason = None
+                        outside = self._sb.get_sensor_data("outside", max_age_s=max_age)
+                        decision = self._fan.calculate_speed(inside, outside, settings)
+                        self._fan.set_speed(decision.speed)
+                        speed, reason = decision.speed, decision.reason
 
-                # Nur loggen wenn sich die Geschwindigkeit geändert hat
-                if speed is not None and speed != last_logged_speed:
+                self._fan.last_reason = reason
+
+                # Loggen, wenn sich Drehzahl oder Begründung geändert haben –
+                # ein Wechsel des Grundes bei gleicher Drehzahl ist ebenso
+                # interessant wie ein Drehzahlsprung.
+                if speed != last_logged_speed or reason != last_logged_reason:
                     await self._db.log_fan_event(speed, reason)
-                    last_logged_speed = speed
+                    last_logged_speed, last_logged_reason = speed, reason
 
                 await asyncio.sleep(interval)
 
