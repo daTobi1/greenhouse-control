@@ -42,6 +42,16 @@ DEFAULT_SETTINGS = {
     "clip_fps": 10,              # fps of recorded clip
     "regulation_enabled": True,  # central on/off for fan regulation
     "camera_count": 1,           # number of camera slots (1-4)
+    # Zeitplan der Kamera 0. Kameras 1–3 bekommen bewusst keine Defaults:
+    # parse_config liefert dort dieselben Werte über seine eigenen Vorgaben.
+    "cam_0_schedule_mode": "interval",   # interval | times
+    "cam_0_schedule_start": None,        # "HH:MM" – ab wann das Intervall läuft
+    "cam_0_schedule_end": None,          # "HH:MM" – optionales Fensterende
+    "cam_0_schedule_times": [],          # ["08:00", "12:00"] im Modus "times"
+    "cam_0_schedule_grace": 300,         # Kulanzfenster in Sekunden
+    "cam_0_date_from": None,             # "YYYY-MM-DD" – Beginn des Zeitraums
+    "cam_0_date_to": None,               # "YYYY-MM-DD" – Ende, einschließlich
+    "cam_0_oneshots": [],                # ["2026-04-01 08:00"] – Einzeltermine
 }
 
 

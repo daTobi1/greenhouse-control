@@ -139,7 +139,7 @@ def next_due(
     """
     candidates = [
         c
-        for c in (_recurring_next(now, cfg, last_capture), _oneshot_next(now, cfg))
+        for c in (_recurring_next(now, cfg, last_capture), next_oneshot(now, cfg))
         if c is not None
     ]
     return min(candidates) if candidates else None
@@ -169,8 +169,13 @@ def _recurring_next(
     return candidate
 
 
-def _oneshot_next(now: datetime, cfg: ScheduleConfig) -> datetime | None:
-    """Nächster noch bevorstehender Einzeltermin, oder None."""
+def next_oneshot(now: datetime, cfg: ScheduleConfig) -> datetime | None:
+    """Nächster noch bevorstehender Einzeltermin, oder None.
+
+    Öffentlich, weil die API den wiederkehrenden Plan im Intervallmodus ohne
+    Startzeit nicht berechnen kann (er hängt an der letzten Aufnahme), den
+    Einzeltermin aber sehr wohl anzeigen soll.
+    """
     for moment in cfg.oneshots:
         if moment > now:
             return moment
