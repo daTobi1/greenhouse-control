@@ -248,6 +248,8 @@ class Scheduler:
 
                 if await self._sleep_until(wake, target):
                     continue  # Einstellungen geändert – Zeitpunkt neu berechnen
+                if not self._running:
+                    break  # Herunterfahren, nicht als verfallene Aufnahme werten
 
                 now = datetime.now()
                 if schedule.is_due(now, target, cfg.grace_seconds):
