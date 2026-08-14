@@ -205,11 +205,10 @@ class Scheduler:
                         cam.stop_session()
 
                 # Wait for interval OR wake event (whichever comes first)
-                _state.timelapse_wake.clear()
+                wake = _state.get_timelapse_wake(cam_idx)
+                wake.clear()
                 try:
-                    await asyncio.wait_for(
-                        _state.timelapse_wake.wait(), timeout=interval
-                    )
+                    await asyncio.wait_for(wake.wait(), timeout=interval)
                 except asyncio.TimeoutError:
                     pass
 
