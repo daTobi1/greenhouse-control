@@ -21,6 +21,9 @@ DEFAULT_GRACE_SECONDS = 300.0
 # Dashboard nicht mehr sinnvoll bedienbar.
 MAX_TIMES = 24
 
+# Mehr als 50 Einzeltermine sind im Dashboard nicht mehr sinnvoll pflegbar.
+MAX_ONESHOTS = 50
+
 
 @dataclass(frozen=True)
 class ScheduleConfig:
@@ -32,6 +35,7 @@ class ScheduleConfig:
     grace_seconds: float
     date_from: date | None = None
     date_to: date | None = None
+    oneshots: tuple[datetime, ...] = ()
 
 
 def parse_time(value) -> time | None:
@@ -61,6 +65,23 @@ def parse_date(value) -> date | None:
         return None
 
 
+def parse_datetime(value) -> datetime | None:
+    """YYYY-MM-DD HH:MM oder mit T als Trenner. Sonst None.
+
+    Ein reines Datum ohne Uhrzeit wird abgelehnt: es waere eine unvollstaendige
+    Eingabe, die stillschweigend als Mitternacht durchginge.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip().replace(" ", "T")
+    if "T" not in text:
+        return None
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
 def parse_config(settings: dict, cam: int) -> ScheduleConfig:
     """Zeitplan einer Kamera aus den Settings lesen.
 
@@ -85,6 +106,10 @@ def parse_config(settings: dict, cam: int) -> ScheduleConfig:
     parsed.discard(None)
     times = tuple(sorted(parsed))[:MAX_TIMES]
 
+    raw_shots = cam_get("oneshots", [])
+    shots = {parse_datetime(v) for v in raw_shots} if isinstance(raw_shots, list) else set()
+    shots.discard(None)
+
     return ScheduleConfig(
         mode=mode,
         interval_seconds=float(
@@ -96,6 +121,7 @@ def parse_config(settings: dict, cam: int) -> ScheduleConfig:
         grace_seconds=float(cam_get("schedule_grace", DEFAULT_GRACE_SECONDS)),
         date_from=parse_date(cam_get("date_from", None)),
         date_to=parse_date(cam_get("date_to", None)),
+        oneshots=tuple(sorted(shots))[:MAX_ONESHOTS],
     )
 
 
@@ -104,10 +130,25 @@ def next_due(
     cfg: ScheduleConfig,
     last_capture: datetime | None,
 ) -> datetime | None:
-    """Nächster Aufnahmezeitpunkt, oder None wenn keiner bestimmbar ist.
+    """Nächster Aufnahmezeitpunkt aus wiederkehrendem Plan und Einzelterminen.
 
     Es wird nie ein Zeitpunkt in der Vergangenheit geliefert; verpasste
-    Aufnahmen verfallen dadurch von selbst.
+    Aufnahmen verfallen dadurch von selbst. Einzeltermine tragen ihr Datum
+    selbst und sind vom Zeitraum unberuehrt. Geliefert wird der frueheste
+    Kandidat, oder None wenn es keinen gibt.
+    """
+    candidates = [
+        c
+        for c in (_recurring_next(now, cfg, last_capture), _oneshot_next(now, cfg))
+        if c is not None
+    ]
+    return min(candidates) if candidates else None
+
+
+def _recurring_next(
+    now: datetime, cfg: ScheduleConfig, last_capture: datetime | None
+) -> datetime | None:
+    """Nächster Zeitpunkt aus dem wiederkehrenden Plan (Intervall oder Uhrzeiten).
 
     Der optionale Zeitraum date_from..date_to begrenzt den Plan. date_to ist
     einschliesslich: am Enddatum wird noch aufgenommen. Vor date_from wird None
@@ -116,16 +157,24 @@ def next_due(
     if cfg.date_from is not None and now.date() < cfg.date_from:
         return None
 
-    if cfg.mode == MODE_TIMES:
-        candidate = _times_next(now, cfg)
-    else:
-        candidate = _interval_next(now, cfg, last_capture)
-
+    candidate = (
+        _times_next(now, cfg)
+        if cfg.mode == MODE_TIMES
+        else _interval_next(now, cfg, last_capture)
+    )
     if candidate is None:
         return None
     if cfg.date_to is not None and candidate.date() > cfg.date_to:
         return None
     return candidate
+
+
+def _oneshot_next(now: datetime, cfg: ScheduleConfig) -> datetime | None:
+    """Nächster noch bevorstehender Einzeltermin, oder None."""
+    for moment in cfg.oneshots:
+        if moment > now:
+            return moment
+    return None
 
 
 def _times_next(now: datetime, cfg: ScheduleConfig) -> datetime | None:
