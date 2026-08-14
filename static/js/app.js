@@ -558,9 +558,9 @@ function buildCameraSection(ci) {
           <label>Bis Uhrzeit</label>
           <input type="time" id="tl-end-${ci}" onchange="saveSchedule(${ci})" />
         </div>
-        <div class="control-row" data-tooltip="Zeitabstand zwischen zwei Timelapse-Aufnahmen in Stunden.">
-          <label>Intervall (Stunden)</label>
-          <input type="text" inputmode="decimal" id="tl-interval-${ci}" placeholder="0,0014"
+        <div class="control-row" data-tooltip="Zeitabstand zwischen zwei Timelapse-Aufnahmen. Von rechts gelesen: 30 sind 30 Sekunden, 5:00 sind fünf Minuten, 1:30:00 eine Stunde dreißig.">
+          <label>Intervall (hh:mm:ss)</label>
+          <input type="text" inputmode="numeric" id="tl-interval-${ci}" placeholder="00:05:00"
                  onchange="saveSchedule(${ci})" />
         </div>
       </div>
@@ -801,6 +801,28 @@ function removeOneshot(ci, k) {
   saveSchedule(ci);
 }
 
+// --- Dauer als hh:mm:ss ---
+
+function parseDuration(text) {
+  // Von rechts gelesen: die letzte Zahl sind immer Sekunden, davor Minuten,
+  // davor Stunden. "30" sind also 30 Sekunden, "5:00" fünf Minuten. Überlauf
+  // ist erlaubt ("0:90" = 90 s), damit kurze Eingaben schnell von der Hand gehen.
+  const parts = String(text ?? '').replace(/\s+/g, '').split(':');
+  if (parts.length > 3 || parts.some(p => !/^\d+$/.test(p))) return NaN;
+  return parts.reduce((total, p) => total * 60 + parseInt(p, 10), 0);
+}
+
+function validDuration(seconds) {
+  // Eine Sekunde ist das Mindeste; 0 hiesse für den Zeitplan "nie".
+  return Number.isFinite(seconds) && seconds >= 1;
+}
+
+function formatDuration(seconds) {
+  const total = Math.max(0, Math.round(Number(seconds) || 0));
+  const parts = [Math.floor(total / 3600), Math.floor((total % 3600) / 60), total % 60];
+  return parts.map(v => String(v).padStart(2, '0')).join(':');
+}
+
 // --- Zeitplan speichern und nächste Aufnahme anzeigen ---
 
 function scheduleBody(ci) {
@@ -809,9 +831,8 @@ function scheduleBody(ci) {
   const end   = document.getElementById(`tl-end-${ci}`).value;
   const from  = document.getElementById(`tl-date-from-${ci}`).value;
   const to    = document.getElementById(`tl-date-to-${ci}`).value;
-  const hours = parseDE(document.getElementById(`tl-interval-${ci}`).value);
 
-  return {
+  const body = {
     [`cam_${ci}_schedule_mode`]:  mode,
     [`cam_${ci}_schedule_start`]: start || null,
     [`cam_${ci}_schedule_end`]:   end   || null,
@@ -819,8 +840,17 @@ function scheduleBody(ci) {
     [`cam_${ci}_date_from`]:      from || null,
     [`cam_${ci}_date_to`]:        to   || null,
     [`cam_${ci}_oneshots`]:       collectOneshots(ci),
-    [`cam_${ci}_timelapse_interval`]: isNaN(hours) ? 300 : Math.max(1, Math.round(hours * 3600)),
   };
+
+  // Unlesbare oder zu kurze Dauer: der Schlüssel bleibt draußen, damit der
+  // gespeicherte Wert stehen bleibt statt still überschrieben zu werden.
+  const secs = parseDuration(document.getElementById(`tl-interval-${ci}`).value);
+  if (validDuration(secs)) {
+    body[`cam_${ci}_timelapse_interval`] = secs;
+  } else {
+    showToast('Ungültige Dauer – Intervall unverändert');
+  }
+  return body;
 }
 
 async function saveSchedule(ci) {
@@ -1040,9 +1070,9 @@ async function fetchTimelapse(ci) {
 
     const tlIntervalEl = document.getElementById(`tl-interval-${ci}`);
     const serverSecs   = d.interval ?? 3600;
-    const uiSecs       = Math.round(parseDE(tlIntervalEl.value) * 3600);
-    if (isNaN(uiSecs) || uiSecs === serverSecs) {
-      tlIntervalEl.value = formatDE(serverSecs / 3600, 4);
+    const uiSecs       = parseDuration(tlIntervalEl.value);
+    if (!validDuration(uiSecs) || uiSecs === serverSecs) {
+      tlIntervalEl.value = formatDuration(serverSecs);
     }
 
     updateScheduleUI(ci);
