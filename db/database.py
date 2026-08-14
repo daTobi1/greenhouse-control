@@ -32,6 +32,15 @@ DEFAULT_SETTINGS = {
     "fan_manual_override": False,
     "fan_manual_speed": 0.0,
     "fan_min_temperature": 5.0,          # frost protection: fan off below this inside temp
+    "humidity_abs_margin": 0.5,   # g/m³ Mindestunterschied für Feuchtelüftung
+    "humidity_temp_guard": 3.0,   # °C unter Ziel, ab da keine Feuchtelüftung
+    "fan_start_threshold": 0.10,  # Rohwert (0..1), ab dem der Lüfter anläuft
+    "fan_stop_threshold": 0.03,   # Rohwert, unter dem er wieder abschaltet
+    "fan_min_runtime": 120,       # Sekunden Mindestlaufzeit
+    "fan_min_pause": 60,          # Sekunden Mindestpause
+    "fan_kickstart_duration": 0.6,  # Sekunden 100-%-Anlaufpuls, 0 = aus
+    "sensor_max_age": 300,   # Sekunden, ab wann Messwerte als veraltet gelten
+    "settings_migrated_thresholds": False,
     "update_check_interval_days": 7,  # 0 = deaktiviert
     "timelapse_path": "timelapse",
     "timelapse_share_enabled": False,
@@ -111,6 +120,23 @@ class Database:
         await self._conn.execute(
             "UPDATE settings SET value = '\"combined_or\"' WHERE key = 'control_mode' AND value = '\"combined\"'"
         )
+
+        # Einmalige Übernahme: wer fan_deadband angepasst hatte, behält den
+        # Wert als neue Einschaltschwelle.
+        migrated = await self.get_setting("settings_migrated_thresholds", False)
+        if not migrated:
+            deadband = await self.get_setting("fan_deadband", 0.1)
+            if deadband is not None and abs(float(deadband) - 0.1) > 1e-9:
+                await self._conn.execute(
+                    "UPDATE settings SET value = ? WHERE key = 'fan_start_threshold'",
+                    (json.dumps(float(deadband)),),
+                )
+                logger.info(f"fan_deadband {deadband} als fan_start_threshold übernommen")
+            await self._conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                ("settings_migrated_thresholds", json.dumps(True)),
+            )
+
         await self._conn.commit()
 
     # --- Sensor readings ---

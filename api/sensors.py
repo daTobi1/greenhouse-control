@@ -1,16 +1,40 @@
 from fastapi import APIRouter, Query, BackgroundTasks
 
 import state
+from services import psychrometrics
 
 router = APIRouter()
+
+
+def _enrich(role: str, max_age: float) -> dict | None:
+    """Messwert um Alter, Frischestatus und Feuchtekennwerte ergänzen."""
+    data = state.switchbot_service.get_sensor_data(role)
+    if not data:
+        return None
+
+    age = state.switchbot_service.data_age(role)
+    result = dict(data)
+    result["age_seconds"] = round(age, 1) if age is not None else None
+    result["stale"] = age is None or age > max_age
+
+    temp = data.get("temperature")
+    hum = data.get("humidity")
+    if temp is not None and hum is not None:
+        result["abs_humidity"] = round(psychrometrics.abs_humidity(temp, hum), 2)
+        result["dew_point"] = round(psychrometrics.dew_point(temp, hum), 1)
+
+    return result
 
 
 @router.get("/current")
 async def get_current():
     """Current sensor readings for inside and outside."""
+    settings = await state.db.get_all_settings()
+    max_age = float(settings.get("sensor_max_age") or 300)
     return {
-        "inside":  state.switchbot_service.get_sensor_data("inside"),
-        "outside": state.switchbot_service.get_sensor_data("outside"),
+        "inside":  _enrich("inside", max_age),
+        "outside": _enrich("outside", max_age),
+        "max_age_seconds": max_age,
     }
 
 
