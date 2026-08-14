@@ -1241,3 +1241,10 @@ textarea:focus-visible {
 .fan-card.regulation-off .regulation-badge {
   display: block;
 }
+.cam-prop-row.locked {
+  opacity: 0.45;
+}
+.cam-prop-row.unsupported label,
+.cam-prop-row.unsupported .cam-prop-val {
+  color: var(--text3);
+}
