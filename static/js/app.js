@@ -878,24 +878,34 @@ async function startTimelapse(ci) {
   const intervalHours = parseDE(document.getElementById(`tl-interval-${ci}`).value);
   const intervalSecs  = Math.round(intervalHours * 3600);
   const devIdx        = parseInt(document.getElementById(`tl-cam-idx-${ci}`).value);
-  const [capW, capH]  = document.getElementById(`tl-resolution-${ci}`).value.split('x').map(Number);
+  const resSel        = document.getElementById(`tl-resolution-${ci}`);
+  const [capW, capH]  = resSel.value.split('x').map(Number);
   const captureMode   = document.getElementById(`tl-capture-mode-${ci}`).value;
   const clipDuration  = parseInt(document.getElementById(`tl-clip-duration-${ci}`).value);
   const clipFps       = parseInt(document.getElementById(`tl-clip-fps-${ci}`).value);
 
+  const body = {
+    [`cam_${ci}_timelapse_interval`]: intervalSecs,
+    [`cam_${ci}_device_index`]: devIdx,
+    [`cam_${ci}_capture_mode`]: captureMode,
+    [`cam_${ci}_clip_duration`]: clipDuration,
+    [`cam_${ci}_clip_fps`]: clipFps,
+    [`cam_${ci}_fourcc`]: document.getElementById(`tl-fourcc-${ci}`).value,
+  };
+
+  // Steht nur noch "Kamera Standard" in der Liste, ist die Erkennung
+  // fehlgeschlagen – das ist keine Nutzerwahl. Die gespeicherte Auflösung
+  // bliebe sonst stillschweigend auf 0x0 zurückgesetzt.
+  const detectionFailed = resSel.options.length === 1 && resSel.options[0].value === '0x0';
+  if (!detectionFailed) {
+    body[`cam_${ci}_capture_width`]  = capW;
+    body[`cam_${ci}_capture_height`] = capH;
+  }
+
   await fetch(`${API}/api/settings`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      [`cam_${ci}_timelapse_interval`]: intervalSecs,
-      [`cam_${ci}_device_index`]: devIdx,
-      [`cam_${ci}_capture_width`]: capW,
-      [`cam_${ci}_capture_height`]: capH,
-      [`cam_${ci}_capture_mode`]: captureMode,
-      [`cam_${ci}_clip_duration`]: clipDuration,
-      [`cam_${ci}_clip_fps`]: clipFps,
-      [`cam_${ci}_fourcc`]: document.getElementById(`tl-fourcc-${ci}`).value,
-    })
+    body: JSON.stringify(body)
   });
 
   const r = await fetch(`${API}/api/timelapse/start?cam=${ci}`, {
