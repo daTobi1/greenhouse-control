@@ -269,17 +269,30 @@ class CameraService:
         Frame nach dem Öffnen einer USB-Kamera ist praktisch nie korrekt
         belichtet.
         """
+        # V4L2 behält Control-Werte über open()/close() hinweg. Ohne das
+        # Zurückschalten stünde die Kamera ab der zweiten Aufnahme noch auf der
+        # manuellen Belichtung der vorigen – das Warm-up liefe auf einem
+        # eingefrorenen Wert und die gesamte Korrektur müsste aus den drei
+        # gedämpften Schritten von _capture_balanced kommen.
+        regulating = self._target_brightness > 0
+        if regulating:
+            cap.set(_PROP_AUTO_EXPOSURE, _PROP_BY_KEY["auto_exposure"]["on_value"])
+
+        # Bei aktiver Regelung besitzt die Software die Belichtung; die
+        # gespeicherten Belichtungs-Properties sind dann laut UI wirkungslos.
+        owned = {_PROP_AUTO_EXPOSURE, _PROP_EXPOSURE} if regulating else set()
+
         if self._cam_props:
             # Auto-Schalter zuerst: ein manueller Wert würde sonst sofort vom
             # noch laufenden Automatikmodus überschrieben.
             for pdef in _BOOL_PROPS:
                 pid = pdef["prop"]
-                if pid in self._cam_props:
+                if pid in self._cam_props and pid not in owned:
                     cap.set(pid, self._cam_props[pid])
             # Manuelle Werte, sofern ihr Auto-Schalter nicht auf on_value steht.
             for pid, val in self._cam_props.items():
                 pdef = _PROP_BY_ID.get(pid)
-                if pdef is None or pdef["type"] == "bool":
+                if pdef is None or pdef["type"] == "bool" or pid in owned:
                     continue
                 if self._auto_engaged(pdef):
                     continue
