@@ -29,9 +29,14 @@ function schreiben(key, wert) {
   try { localStorage.setItem(key, wert); } catch (e) { /* privater Modus */ }
 }
 
+/** Vorgabe ohne gespeicherte Wahl: Touchgerät bekommt "mobil", Rechner
+ *  bekommt "optimiert". Entschieden wird am Eingabegerät, nicht an der
+ *  Fensterbreite – ein schmal gezogenes Fenster am PC ist kein Telefon. */
 function erkenneAnsicht() {
-  const grob = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
-  return (grob || window.innerWidth < 820) ? 'mobil' : 'optimiert';
+  if (!window.matchMedia) return window.innerWidth < 820 ? 'mobil' : 'optimiert';
+  const finger = window.matchMedia('(pointer: coarse)').matches;
+  const keinZeiger = window.matchMedia('(hover: none)').matches;
+  return (finger || keinZeiger) ? 'mobil' : 'optimiert';
 }
 
 function aktuelleAnsicht() {

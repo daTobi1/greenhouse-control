@@ -22,8 +22,14 @@
       var wahl = null;
       try { wahl = localStorage.getItem('gh_view'); } catch (e) {}
       if (erlaubt.indexOf(wahl) === -1) {
-        var grob = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
-        wahl = (grob || window.innerWidth < 820) ? 'mobil' : 'optimiert';
+        // Muss mit erkenneAnsicht() in views.js übereinstimmen: Touchgerät
+        // bekommt mobil, Rechner optimiert. Entschieden wird am Eingabegerät.
+        if (window.matchMedia) {
+          wahl = (window.matchMedia('(pointer: coarse)').matches ||
+                  window.matchMedia('(hover: none)').matches) ? 'mobil' : 'optimiert';
+        } else {
+          wahl = window.innerWidth < 820 ? 'mobil' : 'optimiert';
+        }
       }
       document.documentElement.classList.add('view-' + wahl);
     })();
