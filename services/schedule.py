@@ -110,5 +110,60 @@ def _times_next(now: datetime, cfg: ScheduleConfig) -> datetime | None:
     return datetime.combine(now.date() + timedelta(days=1), cfg.times[0])
 
 
-def _interval_next(now, cfg, last_capture):
+def _interval_next(
+    now: datetime, cfg: ScheduleConfig, last_capture: datetime | None
+) -> datetime | None:
+    if cfg.interval_seconds <= 0:
+        return None
+
+    step = timedelta(seconds=cfg.interval_seconds)
+
+    # Ohne Startzeit gilt das Altverhalten: relativ zur letzten Aufnahme.
+    if cfg.start is None:
+        return now if last_capture is None else last_capture + step
+
+    # Mit Startzeit läuft ein festes Raster ab der Startzeit des jeweiligen
+    # Tages. Der Versatz -1 ist für Fenster über Mitternacht nötig: um 02:10
+    # gehört man noch zum Fenster, das gestern um 22:00 begonnen hat. Ohne
+    # Ende gibt es kein Fenster, das über Mitternacht reichen könnte – der
+    # Versatz -1 würde dann fälschlich Raster-Punkte von gestern früh in den
+    # heutigen Morgen vor der eigentlichen Startzeit hineinstreuen.
+    offsets = (-1, 0, 1) if cfg.end is not None else (0, 1)
+    for day_offset in offsets:
+        anchor = datetime.combine(now.date() + timedelta(days=day_offset), cfg.start)
+        window_end = _window_end(anchor, cfg.start, cfg.end)
+
+        if now < anchor:
+            return anchor
+
+        steps = int((now - anchor) // step) + 1
+        candidate = anchor + steps * step
+        if window_end is None or candidate <= window_end:
+            return candidate
+
     return None
+
+
+def _window_end(anchor: datetime, start: time, end: time | None) -> datetime | None:
+    """Ende des Fensters, das bei `anchor` beginnt. None heißt unbegrenzt.
+
+    Liegt die Endzeit nicht nach der Startzeit, endet das Fenster am Folgetag
+    (Fenster über Mitternacht). end == start wird als 24-Stunden-Fenster
+    behandelt.
+    """
+    if end is None:
+        return None
+    if end > start:
+        return datetime.combine(anchor.date(), end)
+    return datetime.combine(anchor.date() + timedelta(days=1), end)
+
+
+def is_due(now: datetime, target: datetime, grace_seconds: float) -> bool:
+    """True, wenn target erreicht und noch nicht verfallen ist.
+
+    Nach einem Neustart liegt der zuvor geplante Zeitpunkt typisch weit
+    zurück; genau dadurch verfällt er, ohne dass es einen Sonderfall braucht.
+    """
+    if now < target:
+        return False
+    return (now - target).total_seconds() <= grace_seconds
