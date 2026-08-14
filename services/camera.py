@@ -41,6 +41,10 @@ class CameraBusy(RuntimeError):
     """Die Kamera ist gerade von einem anderen Zugriff belegt."""
 
 
+class CameraUnavailable(CameraBusy):
+    """Das Gerät ließ sich nicht öffnen, im Unterschied zu belegt."""
+
+
 COMMON_FPS = [5, 10, 15, 20, 24, 25, 30, 60]
 
 COMMON_RESOLUTIONS = [
@@ -133,9 +137,9 @@ def camera_setup_kwargs(settings: dict, cam: int, tl_path: str) -> dict:
     """
     def cam_get(name: str, default, legacy: str | None = None):
         key = f"cam_{cam}_{name}"
-        if key in settings:
+        if settings.get(key) is not None:
             return settings[key]
-        if cam == 0 and legacy is not None and legacy in settings:
+        if cam == 0 and legacy is not None and settings.get(legacy) is not None:
             return settings[legacy]
         return default
 
@@ -218,7 +222,7 @@ class CameraService:
         try:
             cap = cv2.VideoCapture(self._camera_index)
             if not cap.isOpened():
-                raise CameraBusy(f"Kamera {self._camera_index} lässt sich nicht öffnen")
+                raise CameraUnavailable(f"Kamera {self._camera_index} lässt sich nicht öffnen")
 
             if self._fourcc:
                 cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*self._fourcc))
@@ -525,7 +529,7 @@ class CameraService:
             with self._open_capture(timeout=LOCK_TIMEOUT) as cap:
                 self._apply_props(cap)
                 ret, frame = cap.read()
-        except CameraBusy:
+        except CameraUnavailable:
             return None
         if not ret:
             return None
