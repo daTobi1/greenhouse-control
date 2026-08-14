@@ -224,6 +224,14 @@ async function fetchSensors() {
 
     renderHumidityExtra('in-hum-extra', inside);
     renderHumidityExtra('out-hum-extra', outside);
+
+    // Zielabweichung – nur in den optimierten Ansichten sichtbar (views.css).
+    if (typeof renderZiel === 'function') {
+      const zielTemp = parseDE(document.getElementById('target-temp')?.value);
+      const zielHum  = parseFloat(document.getElementById('target-hum')?.value);
+      renderZiel('in-temp-ziel', inside?.temperature, zielTemp, 'K');
+      renderZiel('in-hum-ziel',  inside?.humidity,    zielHum,  '%');
+    }
     markStale('card-in-temp', inside);
     markStale('card-in-hum', inside);
     markStale('card-out-temp', outside);

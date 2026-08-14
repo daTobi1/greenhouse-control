@@ -1,0 +1,241 @@
+/* ============================================================
+   Ansichten: klassisch / optimiert / mobil
+
+   style.css bleibt die klassische Ansicht. Diese Datei enthält nur die
+   Abweichungen der beiden anderen. Nichts wird dauerhaft versteckt, was
+   nicht mit einem Klick wieder erreichbar ist.
+============================================================ */
+
+/* --- Gemeinsames ------------------------------------------------ */
+
+/* Der Feinschliff-Knopf gehört nur in die optimierten Ansichten. */
+.fein-toggle { display: none; }
+
+/* In der klassischen Ansicht ist die Gruppe kein Kasten, sondern löst
+   sich auf – die Zeilen stehen dann genau wie vorher. */
+.fein-group { display: contents; }
+
+.view-optimiert .fein-toggle,
+.view-mobil .fein-toggle {
+  display: block;
+  width: 100%;
+  margin: .2rem 0 .6rem;
+  padding: .35rem .5rem;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text3);
+  font-family: var(--font);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  transition: border-color var(--tr-fast), color var(--tr-fast);
+}
+.view-optimiert .fein-toggle:hover,
+.view-mobil .fein-toggle:hover { border-color: var(--text3); color: var(--text2); }
+
+.view-optimiert .fein-group,
+.view-mobil .fein-group { display: block; }
+.view-optimiert .fein-group.fein-zu,
+.view-mobil .fein-group.fein-zu { display: none; }
+
+/* Zielabweichung auf den Innen-Karten: nur in den optimierten Ansichten. */
+.ziel-line { display: none; }
+.view-optimiert .ziel-line,
+.view-mobil .ziel-line { display: inline; }
+.ziel-delta { font-family: var(--font-mono); }
+.ziel-delta.drueber { color: var(--warm); }
+.ziel-delta.drunter { color: var(--cool); }
+.ziel-delta.passt   { color: var(--text3); }
+
+/* ============================================================
+   OPTIMIERT – für große Bildschirme
+   Gleiche Elemente, weniger Leerlauf: flachere Karten, schmalere
+   Diagramme, ein Zeitraum für alle drei, Timelapse zweispaltig.
+============================================================ */
+
+/* Messwertkarten flacher, damit der Lüfter früher sichtbar ist */
+.view-optimiert .sensor-card { padding: .7rem .9rem; }
+.view-optimiert .sensor-card .card-value { font-size: 2rem; }
+.view-optimiert .sensor-card .card-label { margin-bottom: .15rem; }
+/* Absolute Feuchte, Taupunkt, Ziel und Alter passen nicht nebeneinander –
+   umbrechen lassen statt stauchen. */
+.view-optimiert .sensor-card .card-meta {
+  margin-top: .3rem;
+  flex-wrap: wrap;
+  row-gap: .15rem;
+  column-gap: .6rem;
+}
+.view-optimiert .sensor-card .card-meta > span { white-space: nowrap; }
+.view-optimiert .sensor-card .card-meta > span:last-child { margin-left: auto; }
+
+/* Nur zwei der drei Zeitraumfelder verstecken – das erste steuert alle.
+   Der Wert der anderen wird in views.js mitgezogen. */
+.view-optimiert .charts-grid .chart-card:not(:first-child) .chart-range {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Diagramme niedriger: drei Stück nebeneinander brauchen keine 30 vh */
+.view-optimiert .chart-card { height: clamp(190px, 22vh, 300px); }
+
+/* Timelapse zweispaltig. Mehrspaltiger Fluss statt Raster: so bleibt der
+   Zeitplan in der ersten Spalte zusammen und die Kamera-Hardware wandert
+   geschlossen in die zweite, statt paarweise durcheinanderzulaufen. */
+@media (min-width: 1101px) {
+  .view-optimiert .timelapse-card {
+    column-count: 2;
+    column-gap: var(--sp-lg);
+  }
+  .view-optimiert .timelapse-card > * { break-inside: avoid; }
+  /* Der Spaltenwechsel gehört genau vor die Kamera-Hardware, sonst reißt der
+     automatische Ausgleich den Zeitplan mittendrin auseinander. Browser ohne
+     :has() bekommen den ausgeglichenen Fluss – unschöner, aber vollständig. */
+  .view-optimiert .timelapse-card > .control-row:has(select[id^="tl-cam-idx"]) {
+    break-before: column;
+  }
+  /* Kopf, Status, Knopfreihe und Aufnahmeliste über beide Spalten */
+  .view-optimiert .timelapse-card > .card-label,
+  .view-optimiert .timelapse-card > .tl-status,
+  .view-optimiert .timelapse-card > .btn-row,
+  .view-optimiert .timelapse-card > .session-list {
+    column-span: all;
+  }
+}
+
+/* Etwas engere Zeilen in der Regelungskarte */
+.view-optimiert .control-card .control-row { padding: .3rem 0; }
+
+/* ============================================================
+   MOBIL – für Telefon und Tablet
+   Große Tippziele, zwei Spalten Messwerte, alles Weitere klappbar.
+============================================================ */
+
+.view-mobil main { padding: .6rem; gap: .6rem; }
+
+/* Kopfzeile einzeilig halten */
+.view-mobil .status-label { display: none; }
+.view-mobil .clock { display: none; }
+.view-mobil header { padding: .5rem .6rem; }
+/* Der Titel gibt nach, nicht die Bedienelemente: er kürzt sich mit
+   Auslassungspunkten, statt die Kopfzeile über den Rand zu schieben. */
+.view-mobil header h1 {
+  font-size: .95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.view-mobil .header-left { margin-right: .5rem; min-width: 0; flex: 1 1 auto; }
+.view-mobil .header-right { flex: 0 0 auto; }
+.view-mobil .header-right { gap: .35rem; }
+
+/* Der Update-Knopf ist die einzige Stelle für die manuelle Prüfung, darf
+   also nicht verschwinden. Auf dem Telefon schrumpft er auf sein Symbol –
+   der Text steckt weiter in title und aria-label. */
+.view-mobil #btn-update-check {
+  font-size: 0;
+  padding: .3rem .5rem;
+  min-width: 34px;
+}
+.view-mobil #btn-update-check::after {
+  content: '\21BB';
+  font-size: .95rem;
+  line-height: 1;
+}
+
+/* Messwerte als 2x2-Kacheln */
+.view-mobil .sensor-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+.view-mobil .sensor-card { padding: .6rem .7rem; }
+.view-mobil .sensor-card .card-value { font-size: 1.9rem; }
+.view-mobil .sensor-card .card-meta {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .1rem;
+  font-size: .68rem;
+}
+
+/* Lüfter über die volle Breite, Ring etwas kleiner.
+   minmax(0, 1fr) statt 1fr: sonst bestimmt der breiteste Inhalt die
+   Spaltenbreite und schiebt die Karte über den Bildschirmrand. */
+.view-mobil .control-grid { grid-template-columns: minmax(0, 1fr); }
+.view-mobil .gauge-container { max-width: 200px; margin: 0 auto; }
+.view-mobil .fan-controls { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+.view-mobil .fan-controls .btn { min-height: 44px; }
+
+/* Bedienzeilen: Beschriftung oben, Feld darunter über die volle Breite */
+.view-mobil .control-row {
+  flex-wrap: wrap;
+  gap: .3rem;
+  padding: .45rem 0;
+}
+.view-mobil .control-row > label { flex: 1 0 100%; }
+.view-mobil .control-row .input-group,
+.view-mobil .control-row > select,
+.view-mobil .control-row > input[type=text],
+.view-mobil .control-row > input[type=number] {
+  flex: 1 1 100%;
+  width: 100%;
+  max-width: none;
+}
+.view-mobil .control-row input[type=text],
+.view-mobil .control-row input[type=number],
+.view-mobil .control-row input[type=time],
+.view-mobil .control-row input[type=date],
+.view-mobil .control-row select {
+  min-height: 40px;
+  width: 100%;
+}
+/* Zwei Felder in einer Zeile (Lüfter min / max): sie müssen sich die Breite
+   teilen und schrumpfen dürfen, sonst schieben sie die Seite auseinander. */
+.view-mobil .input-group.compact { flex-wrap: nowrap; }
+.view-mobil .input-group.compact input {
+  width: auto;
+  flex: 1 1 0;
+  min-width: 0;
+}
+.view-mobil .btn { min-height: 44px; }
+
+/* Diagramme untereinander, etwas niedriger */
+.view-mobil .charts-grid { grid-template-columns: minmax(0, 1fr); }
+.view-mobil .chart-card { height: clamp(200px, 28vh, 320px); }
+.view-mobil .card.mob-zu.chart-card { height: auto; }
+
+/* Timelapse und Vorschau untereinander */
+.view-mobil .timelapse-grid { grid-template-columns: minmax(0, 1fr); }
+.view-mobil .preview-wrap { min-height: 180px; }
+
+/* --- Klappabschnitte ---
+   Nur die erste Überschrift einer Karte ist der Griff; eine zweite (etwa
+   "Aufnahmen" in der Timelapse-Karte) gehört zum Inhalt. */
+.view-mobil .control-card > .card-label:first-child,
+.view-mobil .chart-card > .card-label:first-child,
+.view-mobil .timelapse-card > .card-label:first-child,
+.view-mobil .camera-card > .card-label:first-child {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: .4rem;
+  padding: .2rem 0;
+  user-select: none;
+}
+/* Pfeil zeigt den Zustand an */
+.view-mobil .control-card > .card-label:first-child::before,
+.view-mobil .chart-card > .card-label:first-child::before,
+.view-mobil .timelapse-card > .card-label:first-child::before,
+.view-mobil .camera-card > .card-label:first-child::before {
+  content: '\25BE';
+  color: var(--text3);
+  font-size: .7rem;
+  transition: transform var(--tr-fast);
+}
+.view-mobil .card.mob-zu > .card-label:first-child::before { transform: rotate(-90deg); }
+/* !important, weil Chart.js display und Größe direkt am Canvas setzt. Ohne
+   das bleibt der Canvas sichtbar und wächst in einer Endlosschleife weiter,
+   bis die Seite zehntausende Pixel hoch ist. */
+.view-mobil .card.mob-zu > *:not(:first-child) { display: none !important; }
+/* Zusätzliche Bremse: der Canvas darf nie breiter als die Karte werden. */
+.view-mobil .chart-card canvas { max-width: 100%; }
+
+/* Der Zeitraumwähler sitzt in der Kopfzeile des Diagramms und soll auch
+   im zugeklappten Zustand nicht mitscrollen – er bleibt sichtbar. */
+.view-mobil .chart-card > .card-label .chart-range { margin-left: auto; }
