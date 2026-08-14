@@ -192,7 +192,8 @@ async function fetchSensors() {
     const inside  = d.inside;
     const outside = d.outside;
     const hasBle  = inside || outside;
-    setDot('dot-ble', hasBle ? 'ok' : 'warn');
+    const anyStale = (inside && inside.stale) || (outside && outside.stale);
+    setDot('dot-ble', !hasBle ? 'warn' : (anyStale ? 'warn' : 'ok'));
 
     updateSensorCard('in-temp',  inside,  'temperature');
     updateSensorCard('in-hum',   inside,  'humidity');
@@ -221,6 +222,13 @@ async function fetchSensors() {
     if (outside?.battery != null)
       document.getElementById('out-temp-bat').textContent = `Bat: ${outside.battery}%`;
 
+    renderHumidityExtra('in-hum-extra', inside);
+    renderHumidityExtra('out-hum-extra', outside);
+    markStale('card-in-temp', inside);
+    markStale('card-in-hum', inside);
+    markStale('card-out-temp', outside);
+    markStale('card-out-hum', outside);
+
   } catch (e) {
     setDot('dot-ble', 'error');
   }
@@ -231,9 +239,30 @@ function updateSensorCard(prefix, data, field) {
   el.textContent = data ? fmtVal(data[field]) : '--';
 }
 
+function renderHumidityExtra(id, data) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (!data || data.abs_humidity == null) { el.textContent = ''; return; }
+  // Absolute Feuchte ist die Größe, nach der die Regelung entscheidet.
+  el.textContent = `${formatDE(data.abs_humidity, 1)} g/m³ · Taupunkt ${formatDE(data.dew_point, 1)} °C`;
+}
+
+function markStale(cardId, data) {
+  const card = document.getElementById(cardId);
+  if (card) card.classList.toggle('sensor-stale', !!(data && data.stale));
+}
+
 // ----------------------------------------------------------------
 // Fan status
 // ----------------------------------------------------------------
+const BLOCKED_TEXT = {
+  sensor_stale:    'Sensordaten veraltet',
+  no_inside_data:  'Innensensor fehlt',
+  no_outside_data: 'Außensensor fehlt',
+  frost:           'Frostschutz aktiv',
+  disabled:        'Regelung aus',
+};
+
 async function fetchFan() {
   try {
     const r = await fetch(`${API}/api/fans/status`);
@@ -261,12 +290,18 @@ async function fetchFan() {
       fanCard.classList.toggle('regulation-off', !regEnabled);
     }
 
+    const blocked = d.blocked_reason && d.blocked_reason !== 'disabled'
+      ? BLOCKED_TEXT[d.blocked_reason] : null;
+
     if (!regEnabled) {
       document.getElementById('gauge-sub').textContent = 'Aus';
+    } else if (blocked) {
+      document.getElementById('gauge-sub').textContent = blocked;
     } else {
       document.getElementById('gauge-sub').textContent =
         (d.manual_override ? 'Manuell' : 'Auto') + trendLabel;
     }
+    if (fanCard) fanCard.classList.toggle('fan-blocked', !!blocked);
 
     const autoBtn   = document.getElementById('btn-auto');
     const manualBtn = document.getElementById('btn-manual');
@@ -339,8 +374,13 @@ async function loadControlSettings() {
     document.getElementById('hum-range').value     = s.humidity_control_range ?? 20;
     document.getElementById('fan-min').value       = formatDE((s.fan_min_speed ?? 0.2) * 100, 0);
     document.getElementById('fan-max').value       = formatDE((s.fan_max_speed ?? 1.0) * 100, 0);
-    document.getElementById('fan-deadband').value  = formatDE((s.fan_deadband ?? 0.1) * 100, 0);
     document.getElementById('fan-min-temp').value  = formatDE(s.fan_min_temperature ?? 5, 1);
+    document.getElementById('fan-start-threshold').value = formatDE((s.fan_start_threshold ?? 0.10) * 100, 0);
+    document.getElementById('fan-stop-threshold').value  = formatDE((s.fan_stop_threshold  ?? 0.03) * 100, 0);
+    document.getElementById('fan-min-runtime').value     = s.fan_min_runtime ?? 120;
+    document.getElementById('fan-kickstart').value       = formatDE(s.fan_kickstart_duration ?? 0.6, 1);
+    document.getElementById('humidity-temp-guard').value = formatDE(s.humidity_temp_guard ?? 3.0, 1);
+    document.getElementById('sensor-max-age').value      = s.sensor_max_age ?? 300;
   } catch(e) {}
 }
 
@@ -353,9 +393,22 @@ async function saveControlSettings() {
     humidity_control_range:  parseFloat(document.getElementById('hum-range').value),
     fan_min_speed:           parseDE(document.getElementById('fan-min').value) / 100,
     fan_max_speed:           parseDE(document.getElementById('fan-max').value) / 100,
-    fan_deadband:            parseDE(document.getElementById('fan-deadband').value) / 100,
     fan_min_temperature:     parseDE(document.getElementById('fan-min-temp').value),
+    fan_start_threshold:     parseDE(document.getElementById('fan-start-threshold').value) / 100,
+    fan_stop_threshold:      parseDE(document.getElementById('fan-stop-threshold').value) / 100,
+    fan_min_runtime:         Math.max(0, parseInt(document.getElementById('fan-min-runtime').value) || 0),
+    fan_kickstart_duration:  parseDE(document.getElementById('fan-kickstart').value),
+    humidity_temp_guard:     parseDE(document.getElementById('humidity-temp-guard').value),
+    sensor_max_age:          Math.max(30, parseInt(document.getElementById('sensor-max-age').value) || 300),
   };
+
+  // Ohne Abstand zwischen den Schwellen taktet der Lüfter am Sollwert genauso
+  // wie vor der Hysterese.
+  if (!(body.fan_stop_threshold < body.fan_start_threshold)) {
+    showToast('Ausschaltschwelle muss kleiner als die Einschaltschwelle sein');
+    return;
+  }
+
   await fetch(`${API}/api/settings`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },

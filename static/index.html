@@ -70,7 +70,7 @@
         <span class="trend-badge" id="trend-in-hum"></span>
       </div>
       <div class="card-meta">
-        <span></span>
+        <span id="in-hum-extra"></span>
         <span id="in-hum-ts">--</span>
       </div>
     </div>
@@ -94,7 +94,7 @@
         <span class="trend-badge" id="trend-out-hum"></span>
       </div>
       <div class="card-meta">
-        <span></span>
+        <span id="out-hum-extra"></span>
         <span id="out-hum-ts">--</span>
       </div>
     </div>
@@ -190,11 +190,35 @@
         </div>
       </div>
 
-      <div class="control-row" data-tooltip="Totzone (Hysterese): Der Lüfter startet erst, wenn der berechnete Sollwert diese Schwelle überschreitet. Einmal gestartet, läuft er bis die Bedingung komplett entfällt. Verhindert häufiges Ein-/Ausschalten.">
-        <label for="fan-deadband">Totzone</label>
+      <div class="control-row" data-tooltip="Wie weit die Regelgröße über dem Sollwert liegen muss, damit der Lüfter anläuft.">
+        <label for="fan-start-threshold">Einschaltschwelle</label>
         <div class="input-group">
-          <input type="text" inputmode="decimal" id="fan-deadband" placeholder="10" />
+          <input type="text" inputmode="decimal" id="fan-start-threshold" placeholder="10" />
           <span class="unit">%</span>
+        </div>
+      </div>
+
+      <div class="control-row" data-tooltip="Ab wann der laufende Lüfter wieder abschaltet. Muss kleiner als die Einschaltschwelle sein, sonst taktet der Lüfter am Sollwert.">
+        <label for="fan-stop-threshold">Ausschaltschwelle</label>
+        <div class="input-group">
+          <input type="text" inputmode="decimal" id="fan-stop-threshold" placeholder="3" />
+          <span class="unit">%</span>
+        </div>
+      </div>
+
+      <div class="control-row" data-tooltip="Wie lange der Lüfter nach dem Anlaufen mindestens läuft.">
+        <label for="fan-min-runtime">Mindestlaufzeit</label>
+        <div class="input-group">
+          <input type="number" id="fan-min-runtime" min="0" max="1800" step="10" value="120" />
+          <span class="unit">s</span>
+        </div>
+      </div>
+
+      <div class="control-row" data-tooltip="Kurzer Vollgas-Puls beim Anlaufen. Viele Lüfter kommen bei niedriger Drehzahl nicht aus dem Stand. 0 schaltet den Puls ab.">
+        <label for="fan-kickstart">Anlaufpuls</label>
+        <div class="input-group">
+          <input type="text" inputmode="decimal" id="fan-kickstart" placeholder="0,6" />
+          <span class="unit">s</span>
         </div>
       </div>
 
@@ -203,6 +227,22 @@
         <div class="input-group">
           <input type="text" inputmode="decimal" id="fan-min-temp" placeholder="5,0" />
           <span class="unit">°C</span>
+        </div>
+      </div>
+
+      <div class="control-row" data-tooltip="Wie weit die Innentemperatur unter den Sollwert fallen darf, bevor nicht mehr entfeuchtet wird. Verhindert Auskühlen durch Feuchtelüftung.">
+        <label for="humidity-temp-guard">Feuchte-Temperaturschutz</label>
+        <div class="input-group">
+          <input type="text" inputmode="decimal" id="humidity-temp-guard" placeholder="3,0" />
+          <span class="unit">K</span>
+        </div>
+      </div>
+
+      <div class="control-row" data-tooltip="Ab welchem Alter Messwerte als unbrauchbar gelten. Danach schaltet die Regelung den Lüfter sicherheitshalber ab.">
+        <label for="sensor-max-age">Messwerte gültig</label>
+        <div class="input-group">
+          <input type="number" id="sensor-max-age" min="30" max="3600" step="10" value="300" />
+          <span class="unit">s</span>
         </div>
       </div>
 

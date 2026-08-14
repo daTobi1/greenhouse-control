@@ -1307,3 +1307,12 @@ textarea:focus-visible {
   margin: .2rem 0 .6rem;
   min-height: 1em;
 }
+
+/* --- Regelung: veraltete Messwerte und blockierter Lüfter --- */
+.sensor-card.sensor-stale {
+  opacity: 0.55;
+  border-color: var(--warn, #e3b341);
+}
+.fan-card.fan-blocked .gauge-sub {
+  fill: var(--warn, #e3b341);
+}
