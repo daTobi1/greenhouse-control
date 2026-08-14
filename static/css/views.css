@@ -57,7 +57,16 @@
 .view-optimiert .sensor-card { padding: .7rem .9rem; }
 .view-optimiert .sensor-card .card-value { font-size: 2rem; }
 .view-optimiert .sensor-card .card-label { margin-bottom: .15rem; }
-.view-optimiert .sensor-card .card-meta { margin-top: .3rem; }
+/* Absolute Feuchte, Taupunkt, Ziel und Alter passen nicht nebeneinander –
+   umbrechen lassen statt stauchen. */
+.view-optimiert .sensor-card .card-meta {
+  margin-top: .3rem;
+  flex-wrap: wrap;
+  row-gap: .15rem;
+  column-gap: .6rem;
+}
+.view-optimiert .sensor-card .card-meta > span { white-space: nowrap; }
+.view-optimiert .sensor-card .card-meta > span:last-child { margin-left: auto; }
 
 /* Nur zwei der drei Zeitraumfelder verstecken – das erste steuert alle.
    Der Wert der anderen wird in views.js mitgezogen. */
@@ -144,8 +153,10 @@
   font-size: .68rem;
 }
 
-/* Lüfter über die volle Breite, Ring etwas kleiner */
-.view-mobil .control-grid { grid-template-columns: 1fr; }
+/* Lüfter über die volle Breite, Ring etwas kleiner.
+   minmax(0, 1fr) statt 1fr: sonst bestimmt der breiteste Inhalt die
+   Spaltenbreite und schiebt die Karte über den Bildschirmrand. */
+.view-mobil .control-grid { grid-template-columns: minmax(0, 1fr); }
 .view-mobil .gauge-container { max-width: 200px; margin: 0 auto; }
 .view-mobil .fan-controls { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
 .view-mobil .fan-controls .btn { min-height: 44px; }
@@ -173,16 +184,23 @@
   min-height: 40px;
   width: 100%;
 }
-.view-mobil .input-group.compact input { width: auto; }
+/* Zwei Felder in einer Zeile (Lüfter min / max): sie müssen sich die Breite
+   teilen und schrumpfen dürfen, sonst schieben sie die Seite auseinander. */
+.view-mobil .input-group.compact { flex-wrap: nowrap; }
+.view-mobil .input-group.compact input {
+  width: auto;
+  flex: 1 1 0;
+  min-width: 0;
+}
 .view-mobil .btn { min-height: 44px; }
 
 /* Diagramme untereinander, etwas niedriger */
-.view-mobil .charts-grid { grid-template-columns: 1fr; }
+.view-mobil .charts-grid { grid-template-columns: minmax(0, 1fr); }
 .view-mobil .chart-card { height: clamp(200px, 28vh, 320px); }
 .view-mobil .card.mob-zu.chart-card { height: auto; }
 
 /* Timelapse und Vorschau untereinander */
-.view-mobil .timelapse-grid { grid-template-columns: 1fr; }
+.view-mobil .timelapse-grid { grid-template-columns: minmax(0, 1fr); }
 .view-mobil .preview-wrap { min-height: 180px; }
 
 /* --- Klappabschnitte ---
