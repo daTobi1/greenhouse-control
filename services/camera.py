@@ -6,8 +6,11 @@ and compiles them into a video using ffmpeg.
 import logging
 import subprocess
 import time
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
+
+from services import device_lock
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +20,20 @@ try:
 except ImportError:
     CV2_AVAILABLE = False
     logger.warning("OpenCV not available – camera features disabled")
+
+DEFAULT_FOURCC = "MJPG"
+
+# Zeitfenster, das Erkennung und Vorschau auf eine belegte Kamera warten.
+# Die Aufnahme wartet unbegrenzt, sie hat Vorrang.
+LOCK_TIMEOUT = 2.0
+
+# Reiner Marker: dokumentiert, dass FOURCC vor Breite/Höhe gesetzt werden muss.
+# Wird von tests/test_camera_open.py importiert.
+_PROP_FOURCC_ORDER_MARKER = "fourcc-before-size"
+
+
+class CameraBusy(RuntimeError):
+    """Die Kamera ist gerade von einem anderen Zugriff belegt."""
 
 
 COMMON_FPS = [5, 10, 15, 20, 24, 25, 30, 60]
@@ -76,6 +93,10 @@ class CameraService:
         self._session: str | None = None
         self._frame_count: int = 0
         self._cam_props: dict[int, float] = {}
+        self._fourcc: str = DEFAULT_FOURCC
+        self._warmup_seconds: float = 1.5
+        self._target_brightness: float = 120.0
+        self._brightness_tol: float = 12.0
 
     @property
     def camera_id(self) -> int:
@@ -88,14 +109,52 @@ class CameraService:
         camera_index: int = 0,
         capture_width: int = 0,
         capture_height: int = 0,
+        fourcc: str = DEFAULT_FOURCC,
     ):
         self._frames_dir = Path(frames_dir)
         self._output_dir = Path(output_dir)
         self._camera_index = camera_index
         self._capture_width = capture_width
         self._capture_height = capture_height
+        self._fourcc = fourcc or DEFAULT_FOURCC
         self._frames_dir.mkdir(parents=True, exist_ok=True)
         self._output_dir.mkdir(parents=True, exist_ok=True)
+
+    @contextmanager
+    def _open_capture(self, timeout: float | None = None):
+        """Kamera unter Gerätelock öffnen und konfiguriert bereitstellen.
+
+        timeout=None wartet unbegrenzt (Aufnahme hat Vorrang). Mit einem
+        Timeout wird CameraBusy geworfen, wenn die Kamera belegt ist – der
+        Aufrufer kann daraus eine verständliche Meldung machen, statt eine
+        leere Liste zu liefern.
+
+        Reihenfolge beim Setzen ist zwingend FOURCC, Breite, Höhe: setzt man
+        zuerst die Breite, steht die Kamera kurzzeitig auf einem ungültigen
+        Format und der Treiber snapped auf etwas anderes.
+        """
+        lock = device_lock.get(self._camera_index)
+        acquired = lock.acquire() if timeout is None else lock.acquire(timeout=timeout)
+        if not acquired:
+            raise CameraBusy(f"Kamera {self._camera_index} ist belegt")
+
+        cap = None
+        try:
+            cap = cv2.VideoCapture(self._camera_index)
+            if not cap.isOpened():
+                raise CameraBusy(f"Kamera {self._camera_index} lässt sich nicht öffnen")
+
+            if self._fourcc:
+                cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*self._fourcc))
+            if self._capture_width > 0 and self._capture_height > 0:
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, self._capture_width)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._capture_height)
+
+            yield cap
+        finally:
+            if cap is not None:
+                cap.release()
+            lock.release()
 
     # ------------------------------------------------------------------
     # Camera properties (white balance, contrast, focus, zoom)
@@ -140,49 +199,55 @@ class CameraService:
         """Probe camera for supported properties and their value ranges."""
         if not CV2_AVAILABLE:
             return []
-        cap = cv2.VideoCapture(camera_index)
-        if not cap.isOpened():
-            return []
+        lock = device_lock.get(camera_index)
+        if not lock.acquire(timeout=LOCK_TIMEOUT):
+            raise CameraBusy(f"Kamera {camera_index} ist belegt")
+        try:
+            cap = cv2.VideoCapture(camera_index)
+            if not cap.isOpened():
+                return []
 
-        result = []
-        for pdef in CAMERA_PROPERTIES:
-            pid = pdef["prop"]
-            current = cap.get(pid)
+            result = []
+            for pdef in CAMERA_PROPERTIES:
+                pid = pdef["prop"]
+                current = cap.get(pid)
 
-            entry = {
-                "key": pdef["key"],
-                "label": pdef["label"],
-                "type": pdef["type"],
-                "value": current,
-            }
-            if "unit" in pdef:
-                entry["unit"] = pdef["unit"]
-            if "auto_key" in pdef:
-                entry["auto_key"] = pdef["auto_key"]
+                entry = {
+                    "key": pdef["key"],
+                    "label": pdef["label"],
+                    "type": pdef["type"],
+                    "value": current,
+                }
+                if "unit" in pdef:
+                    entry["unit"] = pdef["unit"]
+                if "auto_key" in pdef:
+                    entry["auto_key"] = pdef["auto_key"]
 
-            if pdef["type"] == "range":
-                cap.set(pid, pdef["min"])
-                actual_min = cap.get(pid)
-                cap.set(pid, pdef["max"])
-                actual_max = cap.get(pid)
-                cap.set(pid, current)
-                supported = abs(actual_max - actual_min) > 0.001
-                entry["min"] = actual_min if supported else pdef["min"]
-                entry["max"] = actual_max if supported else pdef["max"]
-                entry["step"] = pdef["step"]
-                entry["supported"] = supported
-            else:
-                test = 0.0 if current > 0.5 else 1.0
-                cap.set(pid, test)
-                readback = cap.get(pid)
-                supported = abs(readback - test) < 0.5
-                cap.set(pid, current)
-                entry["supported"] = supported
+                if pdef["type"] == "range":
+                    cap.set(pid, pdef["min"])
+                    actual_min = cap.get(pid)
+                    cap.set(pid, pdef["max"])
+                    actual_max = cap.get(pid)
+                    cap.set(pid, current)
+                    supported = abs(actual_max - actual_min) > 0.001
+                    entry["min"] = actual_min if supported else pdef["min"]
+                    entry["max"] = actual_max if supported else pdef["max"]
+                    entry["step"] = pdef["step"]
+                    entry["supported"] = supported
+                else:
+                    test = 0.0 if current > 0.5 else 1.0
+                    cap.set(pid, test)
+                    readback = cap.get(pid)
+                    supported = abs(readback - test) < 0.5
+                    cap.set(pid, current)
+                    entry["supported"] = supported
 
-            result.append(entry)
+                result.append(entry)
 
-        cap.release()
-        return result
+            cap.release()
+            return result
+        finally:
+            lock.release()
 
     # ------------------------------------------------------------------
     # Session control
@@ -227,17 +292,13 @@ class CameraService:
             return None
 
         session_dir = self._frames_dir / self._session
-        cap = cv2.VideoCapture(self._camera_index)
-        if self._capture_width > 0 and self._capture_height > 0:
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH,  self._capture_width)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._capture_height)
-        if not cap.isOpened():
-            logger.error("Cannot open camera")
+        try:
+            with self._open_capture() as cap:
+                self._apply_props(cap)
+                ret, frame = cap.read()
+        except CameraBusy as exc:
+            logger.error(f"capture_frame: {exc}")
             return None
-        self._apply_props(cap)
-
-        ret, frame = cap.read()
-        cap.release()
 
         if not ret:
             logger.error("Failed to read frame from camera")
@@ -258,38 +319,37 @@ class CameraService:
             return None
 
         session_dir = self._frames_dir / self._session
-        cap = cv2.VideoCapture(self._camera_index)
-        if self._capture_width > 0 and self._capture_height > 0:
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH,  self._capture_width)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._capture_height)
-        if not cap.isOpened():
-            logger.error("Cannot open camera for clip")
-            return None
-        self._apply_props(cap)
-
-        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         clip_path = session_dir / f"cam{self._camera_id}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
 
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        out = cv2.VideoWriter(str(clip_path), fourcc, float(clip_fps), (w, h))
+        try:
+            with self._open_capture() as cap:
+                self._apply_props(cap)
 
-        frame_interval = 1.0 / clip_fps
-        end_time = time.monotonic() + duration
-        next_frame = time.monotonic()
+                w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+                out = cv2.VideoWriter(str(clip_path), fourcc, float(clip_fps), (w, h))
 
-        while time.monotonic() < end_time:
-            now = time.monotonic()
-            if now >= next_frame:
-                ret, frame = cap.read()
-                if ret:
-                    out.write(frame)
-                next_frame += frame_interval
-            else:
-                time.sleep(min(0.005, next_frame - now))
+                try:
+                    frame_interval = 1.0 / clip_fps
+                    end_time = time.monotonic() + duration
+                    next_frame = time.monotonic()
 
-        cap.release()
-        out.release()
+                    while time.monotonic() < end_time:
+                        now = time.monotonic()
+                        if now >= next_frame:
+                            ret, frame = cap.read()
+                            if ret:
+                                out.write(frame)
+                            next_frame += frame_interval
+                        else:
+                            time.sleep(min(0.005, next_frame - now))
+                finally:
+                    out.release()
+        except CameraBusy as exc:
+            logger.error(f"capture_clip: {exc}")
+            clip_path.unlink(missing_ok=True)
+            return None
 
         if clip_path.exists() and clip_path.stat().st_size > 0:
             self._frame_count += 1
@@ -303,12 +363,12 @@ class CameraService:
         """Return a JPEG-encoded preview image for the dashboard."""
         if not CV2_AVAILABLE:
             return None
-        cap = cv2.VideoCapture(self._camera_index)
-        if not cap.isOpened():
+        try:
+            with self._open_capture(timeout=LOCK_TIMEOUT) as cap:
+                self._apply_props(cap)
+                ret, frame = cap.read()
+        except CameraBusy:
             return None
-        self._apply_props(cap)
-        ret, frame = cap.read()
-        cap.release()
         if not ret:
             return None
         _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
