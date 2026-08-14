@@ -1,0 +1,3 @@
+# Nur für die Entwicklung – wird von install.sh NICHT installiert.
+pytest>=8.0.0
+numpy>=1.26.0
