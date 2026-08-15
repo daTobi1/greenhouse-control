@@ -164,17 +164,17 @@ class FanController:
         """
         now = time.monotonic() if now is None else now
 
-        target_temp     = settings.get("target_temperature", 25.0)
+        target_temp     = settings.get("target_temperature", 22.0)
         target_humidity = settings.get("target_humidity", 65.0)
-        temp_range      = settings.get("temp_control_range", 5.0)
+        temp_range      = settings.get("temp_control_range", 4.0)
         humidity_range  = settings.get("humidity_control_range", 20.0)
         fan_min         = settings.get("fan_min_speed", 0.2)
         fan_max         = settings.get("fan_max_speed", 1.0)
         mode            = settings.get("control_mode", "combined_or")
-        min_temp        = settings.get("fan_min_temperature", 5.0)
+        min_temp        = settings.get("fan_min_temperature", 2.0)
         abs_margin      = settings.get("humidity_abs_margin", 0.5)
-        temp_guard      = settings.get("humidity_temp_guard", 3.0)
-        hum_metric      = settings.get("humidity_metric", "relative")
+        temp_guard      = settings.get("humidity_temp_guard", 20.0)
+        hum_metric      = settings.get("humidity_metric", "vpd")
         target_vpd      = settings.get("target_vpd", 0.80)
         vpd_range       = settings.get("vpd_control_range", 0.40)
         start_threshold = settings.get("fan_start_threshold", 0.10)

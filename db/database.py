@@ -12,13 +12,16 @@ _SETTINGS_CACHE_TTL = 5  # Sekunden
 DEFAULT_SETTINGS = {
     "inside_sensor_mac": "",
     "outside_sensor_mac": "",
-    "target_temperature": 25.0,
+    # Bonsai-Schutzhaus fuer heimische Arten: keine Zieltemperatur zum
+    # Heizen, sondern die Grenze, ab der gegen Hitzestau gelueftet wird.
+    "target_temperature": 22.0,
     "target_humidity": 65.0,
     "control_mode": "combined_or",  # temperature | humidity | combined_or | combined_and
     "fan_gpio_pin": 18,
     "fan_min_speed": 0.2,
     "fan_max_speed": 1.0,
-    "temp_control_range": 5.0,       # full speed at +5°C above target
+    "temp_control_range": 4.0,       # volle Drehzahl 4 K ueber dem Ziel –
+                                     # ein kleines Haus heizt schnell auf
     "humidity_control_range": 20.0,  # full speed at +20% above target
     "fan_update_interval": 10,        # seconds
     "ble_scan_interval": 30,          # seconds
@@ -31,10 +34,14 @@ DEFAULT_SETTINGS = {
     "fan_deadband": 0.1,             # hysteresis: min raw speed (0..1) to start fan
     "fan_manual_override": False,
     "fan_manual_speed": 0.0,
-    "fan_min_temperature": 5.0,          # frost protection: fan off below this inside temp
+    "fan_min_temperature": 2.0,   # Frostschutz. Die Wurzeln im flachen Topf
+                                  # sind weit empfindlicher als der Stamm.
     "humidity_abs_margin": 0.5,   # g/m³ Mindestunterschied für Feuchtelüftung
-    "humidity_temp_guard": 3.0,   # °C unter Ziel, ab da keine Feuchtelüftung
-    "humidity_metric": "relative",  # relative | vpd – wonach die Feuchte geregelt wird
+    # Weit gefasst, weil Auskuehlen im Winterhaus erwuenscht ist: entfeuchtet
+    # wird bis 2 °C, dort uebernimmt der Frostschutz. Mit einem engen Abstand
+    # liefe die Entfeuchtung genau dann nie, wenn Dauernaesse gefaehrlich wird.
+    "humidity_temp_guard": 20.0,  # K unter Ziel, ab da keine Feuchtelüftung
+    "humidity_metric": "vpd",     # relative | vpd – wonach die Feuchte geregelt wird
     "target_vpd": 0.80,           # kPa Dampfdruckdefizit, Ziel im Modus "vpd" (Bonsai)
     "vpd_control_range": 0.40,    # kPa unter dem Ziel bis zur vollen Drehzahl
     "fan_start_threshold": 0.10,  # Rohwert (0..1), ab dem der Lüfter anläuft

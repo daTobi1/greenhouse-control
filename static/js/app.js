@@ -402,7 +402,7 @@ async function loadControlSettings() {
     document.getElementById('hum-range').value     = s.humidity_control_range ?? 20;
     document.getElementById('fan-min').value       = formatDE((s.fan_min_speed ?? 0.2) * 100, 0);
     document.getElementById('fan-max').value       = formatDE((s.fan_max_speed ?? 1.0) * 100, 0);
-    document.getElementById('fan-min-temp').value  = formatDE(s.fan_min_temperature ?? 5, 1);
+    document.getElementById('fan-min-temp').value  = formatDE(s.fan_min_temperature ?? 2, 1);
     document.getElementById('humidity-metric').value = s.humidity_metric ?? 'relative';
     document.getElementById('target-vpd').value    = formatDE(s.target_vpd ?? 0.80, 2);
     document.getElementById('vpd-range').value     = formatDE(s.vpd_control_range ?? 0.40, 2);
@@ -411,7 +411,7 @@ async function loadControlSettings() {
     document.getElementById('fan-stop-threshold').value  = formatDE((s.fan_stop_threshold  ?? 0.03) * 100, 0);
     document.getElementById('fan-min-runtime').value     = s.fan_min_runtime ?? 120;
     document.getElementById('fan-kickstart').value       = formatDE(s.fan_kickstart_duration ?? 0.6, 1);
-    document.getElementById('humidity-temp-guard').value = formatDE(s.humidity_temp_guard ?? 3.0, 1);
+    document.getElementById('humidity-temp-guard').value = formatDE(s.humidity_temp_guard ?? 20.0, 1);
     document.getElementById('sensor-max-age').value      = s.sensor_max_age ?? 300;
   } catch(e) {}
 }

@@ -16,6 +16,9 @@ def _settings(**over):
         "fan_min_temperature": 5.0,
         "humidity_abs_margin": 0.5,
         "humidity_temp_guard": 3.0,
+        # Diese Datei prueft den Zweig fuer relative Feuchte. Ausdruecklich
+        # gesetzt, weil die Vorgabe der Anlage inzwischen VPD ist.
+        "humidity_metric": "relative",
     }
     base.update(over)
     return base
