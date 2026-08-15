@@ -34,6 +34,9 @@ DEFAULT_SETTINGS = {
     "fan_min_temperature": 5.0,          # frost protection: fan off below this inside temp
     "humidity_abs_margin": 0.5,   # g/m³ Mindestunterschied für Feuchtelüftung
     "humidity_temp_guard": 3.0,   # °C unter Ziel, ab da keine Feuchtelüftung
+    "humidity_metric": "relative",  # relative | vpd – wonach die Feuchte geregelt wird
+    "target_vpd": 0.95,           # kPa Dampfdruckdefizit, Ziel im Modus "vpd"
+    "vpd_control_range": 0.40,    # kPa unter dem Ziel bis zur vollen Drehzahl
     "fan_start_threshold": 0.10,  # Rohwert (0..1), ab dem der Lüfter anläuft
     "fan_stop_threshold": 0.03,   # Rohwert, unter dem er wieder abschaltet
     "fan_min_runtime": 120,       # Sekunden Mindestlaufzeit

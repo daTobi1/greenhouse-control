@@ -22,6 +22,8 @@ def _enrich(role: str, max_age: float) -> dict | None:
     if temp is not None and hum is not None:
         result["abs_humidity"] = round(psychrometrics.abs_humidity(temp, hum), 2)
         result["dew_point"] = round(psychrometrics.dew_point(temp, hum), 1)
+        # Dampfdruckdefizit – die Größe, die die Verdunstung am Blatt antreibt.
+        result["vpd"] = round(psychrometrics.vpd(temp, hum), 2)
 
     return result
 
