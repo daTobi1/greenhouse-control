@@ -175,7 +175,7 @@ class FanController:
         abs_margin      = settings.get("humidity_abs_margin", 0.5)
         temp_guard      = settings.get("humidity_temp_guard", 3.0)
         hum_metric      = settings.get("humidity_metric", "relative")
-        target_vpd      = settings.get("target_vpd", 0.95)
+        target_vpd      = settings.get("target_vpd", 0.80)
         vpd_range       = settings.get("vpd_control_range", 0.40)
         start_threshold = settings.get("fan_start_threshold", 0.10)
         stop_threshold  = settings.get("fan_stop_threshold", 0.03)

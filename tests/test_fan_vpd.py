@@ -138,3 +138,22 @@ def test_missing_setting_falls_back_to_the_relative_metric():
 def test_unknown_metric_falls_back_to_relative():
     d = _speed(_air(24.0, 68.0), target_temperature=24.0, humidity_metric="unsinn")
     assert d.speed == pytest.approx(_erwartet(0.15), abs=0.01)
+
+
+def test_default_target_matches_the_database_default():
+    """Der Vorgabewert steht an vier Stellen – Datenbank, Regler, Feld und
+    Anzeige. Laufen sie auseinander, regelt der Regler auf etwas anderes als
+    im Dashboard steht."""
+    from db.database import DEFAULT_SETTINGS
+
+    ohne = _settings(target_temperature=30.0)
+    del ohne["target_vpd"]
+
+    # 30 °C / 80 % ergibt VPD 0,85: knapp ueber der Vorgabe 0,80, also zu
+    # trocken – der Luefter bleibt aus. Mit der frueheren Vorgabe 0,95 waere
+    # er angelaufen.
+    fan = FanController()
+    d = fan.calculate_speed(_air(30.0, 80.0), TROCKEN_AUSSEN, ohne, now=0.0)
+    assert DEFAULT_SETTINGS["target_vpd"] == 0.80
+    assert psy.vpd(30.0, 80.0) > DEFAULT_SETTINGS["target_vpd"]
+    assert d.speed == 0.0
