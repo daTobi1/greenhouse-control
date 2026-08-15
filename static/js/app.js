@@ -228,9 +228,16 @@ async function fetchSensors() {
     // Zielabweichung – nur in den optimierten Ansichten sichtbar (views.css).
     if (typeof renderZiel === 'function') {
       const zielTemp = parseDE(document.getElementById('target-temp')?.value);
-      const zielHum  = parseFloat(document.getElementById('target-hum')?.value);
       renderZiel('in-temp-ziel', inside?.temperature, zielTemp, 'K');
-      renderZiel('in-hum-ziel',  inside?.humidity,    zielHum,  '%');
+
+      // Die Zielzeile zeigt die Größe, nach der auch geregelt wird.
+      if (document.getElementById('humidity-metric')?.value === 'vpd') {
+        const zielVpd = parseDE(document.getElementById('target-vpd')?.value);
+        renderZiel('in-hum-ziel', inside?.vpd, zielVpd, 'kPa', 2);
+      } else {
+        const zielHum = parseFloat(document.getElementById('target-hum')?.value);
+        renderZiel('in-hum-ziel', inside?.humidity, zielHum, '%');
+      }
     }
     markStale('card-in-temp', inside);
     markStale('card-in-hum', inside);
@@ -251,8 +258,21 @@ function renderHumidityExtra(id, data) {
   const el = document.getElementById(id);
   if (!el) return;
   if (!data || data.abs_humidity == null) { el.textContent = ''; return; }
-  // Absolute Feuchte ist die Größe, nach der die Regelung entscheidet.
-  el.textContent = `${formatDE(data.abs_humidity, 1)} g/m³ · Taupunkt ${formatDE(data.dew_point, 1)} °C`;
+  // Absolute Feuchte entscheidet über das Lüften, das VPD über die Pflanze.
+  let text = `${formatDE(data.abs_humidity, 1)} g/m³ · Taupunkt ${formatDE(data.dew_point, 1)} °C`;
+  if (data.vpd != null) text += ` · VPD ${formatDE(data.vpd, 2)} kPa`;
+  el.textContent = text;
+}
+
+/** Zeigt je nach eingestellter Regelgröße die Sollwertzeilen für relative
+ *  Feuchte oder für das VPD. Beide Sätze bleiben im Dokument, damit beim
+ *  Speichern nichts fehlt. */
+function updateHumidityMetricUI() {
+  const el = document.getElementById('humidity-metric');
+  if (!el) return;
+  const vpd = el.value === 'vpd';
+  document.querySelectorAll('.metric-relative').forEach(r => r.classList.toggle('hidden', vpd));
+  document.querySelectorAll('.metric-vpd').forEach(r => r.classList.toggle('hidden', !vpd));
 }
 
 function markStale(cardId, data) {
@@ -383,6 +403,10 @@ async function loadControlSettings() {
     document.getElementById('fan-min').value       = formatDE((s.fan_min_speed ?? 0.2) * 100, 0);
     document.getElementById('fan-max').value       = formatDE((s.fan_max_speed ?? 1.0) * 100, 0);
     document.getElementById('fan-min-temp').value  = formatDE(s.fan_min_temperature ?? 5, 1);
+    document.getElementById('humidity-metric').value = s.humidity_metric ?? 'relative';
+    document.getElementById('target-vpd').value    = formatDE(s.target_vpd ?? 0.95, 2);
+    document.getElementById('vpd-range').value     = formatDE(s.vpd_control_range ?? 0.40, 2);
+    updateHumidityMetricUI();
     document.getElementById('fan-start-threshold').value = formatDE((s.fan_start_threshold ?? 0.10) * 100, 0);
     document.getElementById('fan-stop-threshold').value  = formatDE((s.fan_stop_threshold  ?? 0.03) * 100, 0);
     document.getElementById('fan-min-runtime').value     = s.fan_min_runtime ?? 120;
@@ -402,6 +426,9 @@ async function saveControlSettings() {
     fan_min_speed:           parseDE(document.getElementById('fan-min').value) / 100,
     fan_max_speed:           parseDE(document.getElementById('fan-max').value) / 100,
     fan_min_temperature:     parseDE(document.getElementById('fan-min-temp').value),
+    humidity_metric:         document.getElementById('humidity-metric').value,
+    target_vpd:              parseDE(document.getElementById('target-vpd').value),
+    vpd_control_range:       parseDE(document.getElementById('vpd-range').value),
     fan_start_threshold:     parseDE(document.getElementById('fan-start-threshold').value) / 100,
     fan_stop_threshold:      parseDE(document.getElementById('fan-stop-threshold').value) / 100,
     fan_min_runtime:         Math.max(0, parseInt(document.getElementById('fan-min-runtime').value) || 0),
@@ -414,6 +441,13 @@ async function saveControlSettings() {
   // wie vor der Hysterese.
   if (!(body.fan_stop_threshold < body.fan_start_threshold)) {
     showToast('Ausschaltschwelle muss kleiner als die Einschaltschwelle sein');
+    return;
+  }
+
+  // Ein VPD-Bereich von 0 würde die Feuchtelüftung stillschweigend abschalten.
+  if (body.humidity_metric === 'vpd' &&
+      !(body.target_vpd > 0 && body.vpd_control_range > 0)) {
+    showToast('Ziel-VPD und VPD-Regelbereich müssen größer als 0 sein');
     return;
   }
 

@@ -170,11 +170,27 @@
         </div>
       </div>
 
-      <div class="control-row" data-tooltip="Ziel-Luftfeuchtigkeit im Gewächshaus. Der Lüfter läuft, wenn die Innenfeuchtigkeit diesen Wert überschreitet und es draußen trockener ist.">
+      <div class="control-row" data-tooltip="Relative Feuchte ist der gewohnte Sollwert, hängt aber an der Temperatur. Das Dampfdruckdefizit (VPD) beschreibt, wie stark die Luft der Pflanze Wasser entzieht, und ist über Temperaturen hinweg vergleichbar.">
+        <label for="humidity-metric">Feuchte regeln nach</label>
+        <select id="humidity-metric" onchange="updateHumidityMetricUI()">
+          <option value="relative">rel. Feuchte</option>
+          <option value="vpd">VPD</option>
+        </select>
+      </div>
+
+      <div class="control-row metric-relative" data-tooltip="Ziel-Luftfeuchtigkeit im Gewächshaus. Der Lüfter läuft, wenn die Innenfeuchtigkeit diesen Wert überschreitet und es draußen trockener ist.">
         <label for="target-hum">Ziel-Feuchtigkeit</label>
         <div class="input-group">
           <input type="number" id="target-hum" min="0" max="100" step="1" />
           <span class="unit">%</span>
+        </div>
+      </div>
+
+      <div class="control-row metric-vpd hidden" data-tooltip="Angestrebtes Dampfdruckdefizit. Richtwerte: 0,4–0,8 kPa für Jungpflanzen, 0,8–1,2 im Wachstum, 1,0–1,5 in der Fruchtphase. Unter dem Ziel ist die Luft zu feucht, dann wird gelüftet.">
+        <label for="target-vpd">Ziel-VPD</label>
+        <div class="input-group">
+          <input type="text" inputmode="decimal" id="target-vpd" placeholder="0,95" />
+          <span class="unit">kPa</span>
         </div>
       </div>
 
@@ -196,11 +212,19 @@
         </div>
       </div>
 
-      <div class="control-row" data-tooltip="Feuchtigkeitsdifferenz zum Zielwert, bei der der Lüfter die maximale Drehzahl erreicht. Kleiner Wert = empfindlichere Regelung.">
+      <div class="control-row metric-relative" data-tooltip="Feuchtigkeitsdifferenz zum Zielwert, bei der der Lüfter die maximale Drehzahl erreicht. Kleiner Wert = empfindlichere Regelung.">
         <label for="hum-range">Feuchte-Regelbereich</label>
         <div class="input-group">
           <input type="number" id="hum-range" min="1" max="50" step="1" />
           <span class="unit">%</span>
+        </div>
+      </div>
+
+      <div class="control-row metric-vpd hidden" data-tooltip="Wie weit das VPD unter dem Ziel liegen darf, bis der Lüfter auf volle Drehzahl geht. Kleiner Wert = empfindlichere Regelung.">
+        <label for="vpd-range">VPD-Regelbereich</label>
+        <div class="input-group">
+          <input type="text" inputmode="decimal" id="vpd-range" placeholder="0,40" />
+          <span class="unit">kPa</span>
         </div>
       </div>
 

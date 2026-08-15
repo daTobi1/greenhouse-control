@@ -35,6 +35,24 @@ def abs_humidity(temp_c: float, rel_hum: float) -> float:
     return saturation * rh * _GM3 / (273.15 + temp_c)
 
 
+def saturation_pressure(temp_c: float) -> float:
+    """Sättigungsdampfdruck in kPa."""
+    return _ES0 / 10.0 * math.exp(_MAGNUS_A * temp_c / (temp_c + _MAGNUS_B))
+
+
+def vpd(temp_c: float, rel_hum: float) -> float:
+    """Dampfdruckdefizit in kPa – wie viel Wasserdampf die Luft noch aufnimmt.
+
+    Das ist die Größe, die die Verdunstung am Blatt antreibt. Die relative
+    Feuchte allein taugt dafür nicht: 80 % bei 15 °C und 80 % bei 30 °C
+    bedeuten für die Pflanze das Zwei- bis Dreifache an Verdunstungsleistung.
+
+    Gerechnet wird mit der Lufttemperatur. Das Blatt ist je nach Einstrahlung
+    ein bis zwei Kelvin kühler, dafür fehlt hier aber der Messwert.
+    """
+    return saturation_pressure(temp_c) * (1.0 - _clamp_rh(rel_hum) / 100.0)
+
+
 def dew_point(temp_c: float, rel_hum: float) -> float:
     """Taupunkt in °C."""
     rh = _clamp_rh(rel_hum)

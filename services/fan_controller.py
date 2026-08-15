@@ -174,6 +174,9 @@ class FanController:
         min_temp        = settings.get("fan_min_temperature", 5.0)
         abs_margin      = settings.get("humidity_abs_margin", 0.5)
         temp_guard      = settings.get("humidity_temp_guard", 3.0)
+        hum_metric      = settings.get("humidity_metric", "relative")
+        target_vpd      = settings.get("target_vpd", 0.95)
+        vpd_range       = settings.get("vpd_control_range", 0.40)
         start_threshold = settings.get("fan_start_threshold", 0.10)
         stop_threshold  = settings.get("fan_stop_threshold", 0.03)
         min_runtime     = settings.get("fan_min_runtime", 120.0)
@@ -210,7 +213,15 @@ class FanController:
                 speed_temp = min(1.0, err / temp_range)
 
         if mode in ("humidity", "combined_or", "combined_and"):
-            err = i_hum - target_humidity
+            if hum_metric == "vpd":
+                # Nach Dampfdruckdefizit: zu feucht heißt VPD zu niedrig. Ein
+                # zu hohes VPD (zu trockene Luft) ergibt einen negativen
+                # Fehler – der Abluftlüfter kann nicht befeuchten.
+                err = target_vpd - psychrometrics.vpd(i_temp, i_hum)
+                span = vpd_range
+            else:
+                err = i_hum - target_humidity
+                span = humidity_range
             # Entfeuchten kühlt zwangsläufig mit. Unterhalb des Schutzabstands
             # zum Temperatur-Sollwert wird deshalb nicht mehr entfeuchtet.
             warm_enough = i_temp > target_temp - temp_guard
@@ -218,8 +229,8 @@ class FanController:
                 psychrometrics.abs_humidity(o_temp, o_hum)
                 < psychrometrics.abs_humidity(i_temp, i_hum) - abs_margin
             )
-            if err > 0 and warm_enough and drier_outside:
-                speed_hum = min(1.0, err / humidity_range)
+            if err > 0 and warm_enough and drier_outside and span > 0:
+                speed_hum = min(1.0, err / span)
 
         if mode == "combined_and":
             raw = min(speed_temp, speed_hum)

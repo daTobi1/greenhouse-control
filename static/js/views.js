@@ -154,21 +154,24 @@ function zeitraumKoppeln() {
 
 /** Zeigt "Ziel 24,0 · +2,4 K" unter dem Messwert. Nur eine Ergänzung –
  *  in der klassischen Ansicht blendet die CSS sie aus. */
-function renderZiel(id, istWert, sollWert, einheit) {
+function renderZiel(id, istWert, sollWert, einheit, nachkomma = 1) {
   const el = document.getElementById(id);
   if (!el) return;
   if (istWert == null || isNaN(istWert) || sollWert == null || isNaN(sollWert)) {
     el.textContent = '';
     return;
   }
+  // Was als "erreicht" gilt, hängt an der Auflösung der Anzeige: 0,05 bei
+  // einer Nachkommastelle, 0,005 bei zweien.
+  const genau = 0.5 / Math.pow(10, nachkomma);
   const diff = istWert - sollWert;
-  const zahl = typeof formatDE === 'function' ? formatDE(sollWert, 1) : String(sollWert);
-  const dz = typeof formatDE === 'function' ? formatDE(Math.abs(diff), 1) : String(Math.abs(diff));
+  const zahl = typeof formatDE === 'function' ? formatDE(sollWert, nachkomma) : String(sollWert);
+  const dz = typeof formatDE === 'function' ? formatDE(Math.abs(diff), nachkomma) : String(Math.abs(diff));
 
   const delta = document.createElement('span');
   delta.className = 'ziel-delta ' +
-    (diff > 0.05 ? 'drueber' : diff < -0.05 ? 'drunter' : 'passt');
-  delta.textContent = Math.abs(diff) <= 0.05
+    (diff > genau ? 'drueber' : diff < -genau ? 'drunter' : 'passt');
+  delta.textContent = Math.abs(diff) <= genau
     ? 'erreicht'
     : (diff > 0 ? '+' : '−') + dz + ' ' + einheit;
 
