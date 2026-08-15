@@ -404,7 +404,7 @@ async function loadControlSettings() {
     document.getElementById('fan-max').value       = formatDE((s.fan_max_speed ?? 1.0) * 100, 0);
     document.getElementById('fan-min-temp').value  = formatDE(s.fan_min_temperature ?? 5, 1);
     document.getElementById('humidity-metric').value = s.humidity_metric ?? 'relative';
-    document.getElementById('target-vpd').value    = formatDE(s.target_vpd ?? 0.95, 2);
+    document.getElementById('target-vpd').value    = formatDE(s.target_vpd ?? 0.80, 2);
     document.getElementById('vpd-range').value     = formatDE(s.vpd_control_range ?? 0.40, 2);
     updateHumidityMetricUI();
     document.getElementById('fan-start-threshold').value = formatDE((s.fan_start_threshold ?? 0.10) * 100, 0);
