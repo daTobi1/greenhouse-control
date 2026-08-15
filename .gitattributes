@@ -1,0 +1,22 @@
+# Zeilenenden festnageln.
+#
+# Das Projekt laeuft auf einem Raspberry Pi, entwickelt wird unter Windows.
+# Ohne diese Datei entscheidet das jeweils schreibende Werkzeug: manche
+# schreiben LF, manche CRLF. Das Ergebnis sind Commits, in denen jede Zeile
+# als geaendert erscheint, obwohl nur ein Wert angepasst wurde.
+#
+# Im Repository steht immer LF, ausgecheckt wird immer LF. Fuer Shell-Skripte
+# ist das nicht Geschmackssache: ein Skript mit CRLF scheitert unter Linux.
+
+* text=auto eol=lf
+
+# Eindeutig binaer – nie anfassen.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.mp4 binary
+*.db  binary
+
+# Windows-eigene Dateien behalten CRLF, sonst stolpert cmd.exe.
+*.bat text eol=crlf
