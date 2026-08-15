@@ -126,13 +126,20 @@ def test_relative_mode_is_unchanged():
     assert d.speed == pytest.approx(_erwartet(0.15), abs=0.01)
 
 
-def test_missing_setting_falls_back_to_the_relative_metric():
-    """Bestehende Installationen regeln nach dem Update genau wie vorher."""
+def test_missing_setting_falls_back_to_vpd():
+    """Ohne gesetzten Schlüssel gilt die Anlagenvorgabe, und die ist VPD.
+
+    Bestehende Installationen sind davon nicht betroffen: dort steht der
+    Schlüssel bereits in der Datenbank und behält seinen Wert.
+    """
     ohne = _settings(target_temperature=24.0)
     del ohne["humidity_metric"]
     fan = FanController()
     d = fan.calculate_speed(_air(24.0, 68.0), TROCKEN_AUSSEN, ohne, now=0.0)
-    assert d.speed == pytest.approx(_erwartet(0.15), abs=0.01)
+    # 24 °C / 68 % ergibt genau die 0,95 kPa, die diese Testdatei als Ziel
+    # setzt: kein Fehler, kein Lüften. Nach relativer Feuchte läge der Wert
+    # drei Punkte über dem Sollwert und der Lüfter liefe.
+    assert d.speed == 0.0
 
 
 def test_unknown_metric_falls_back_to_relative():
